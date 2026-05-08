@@ -1,12 +1,16 @@
 import numpy as np
 from opendbc.can import CANPacker
 from opendbc.car import Bus
-from opendbc.car.lateral import apply_driver_steer_torque_limits
+from opendbc.car.lateral import apply_driver_steer_torque_limits, common_fault_avoidance
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.rivian.riviancan import create_lka_steering, create_longitudinal, create_wheel_touch, create_adas_status
 from opendbc.car.rivian.values import CarControllerParams, RivianFlags
 
 from opendbc.sunnypilot.car.rivian.mads import MadsCarController
+
+# Fault avoidance: periodic torque=0 and request=0 blip. Panda allows (0,0) through by skipping rate checks when steer_req=0.
+MAX_ANGLE_FRAMES = 89
+BLIP_FRAMES = 1
 
 
 class CarController(CarControllerBase, MadsCarController):
@@ -15,7 +19,7 @@ class CarController(CarControllerBase, MadsCarController):
     MadsCarController.__init__(self)
     self.apply_torque_last = 0
     self.packer = CANPacker(dbc_names[Bus.pt])
-
+    self.angle_limit_counter = 0
     self.cancel_frames = 0
 
   def update(self, CC, CC_SP, CS, now_nanos):
@@ -31,9 +35,22 @@ class CarController(CarControllerBase, MadsCarController):
       apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last,
                                                       CS.out.steeringTorque, CarControllerParams, steer_max)
 
+    # Fault avoidance: periodic blip regardless of steering angle
+    self.angle_limit_counter, lka_act_toi = common_fault_avoidance(
+      True,
+      self.mads.lat_active,
+      self.angle_limit_counter,
+      MAX_ANGLE_FRAMES,
+      BLIP_FRAMES,
+    )
+
+    blip = self.mads.lat_active and not lka_act_toi
+    send_torque = 0 if blip else apply_torque
+    if not blip:
+      self.apply_torque_last = apply_torque
+
     # send steering command
-    self.apply_torque_last = apply_torque
-    can_sends.append(create_lka_steering(self.packer, self.frame, CS.acm_lka_hba_cmd, apply_torque, CC.enabled, CC.latActive, self.mads))
+    can_sends.append(create_lka_steering(self.packer, self.frame, CS.acm_lka_hba_cmd, send_torque, CC.enabled, CC.latActive, self.mads, lka_act_toi))
 
     if self.frame % 5 == 0 and not (self.CP.flags & RivianFlags.GEN2):
       can_sends.append(create_wheel_touch(self.packer, CS.sccm_wheel_touch, CC.enabled))
