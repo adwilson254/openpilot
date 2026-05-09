@@ -22,8 +22,8 @@ def checksum(msg):
   return addr, ret, bus
 
 
-class TestRivianSafetyBase(common.CarSafetyTest, common.DriverTorqueSteeringSafetyTest, common.LongitudinalAccelSafetyTest,
-                           common.VehicleSpeedSafetyTest):
+class TestRivianSafetyBase(common.CarSafetyTest, common.DriverTorqueSteeringSafetyTest, common.SteerRequestCutSafetyTest,
+                           common.LongitudinalAccelSafetyTest, common.VehicleSpeedSafetyTest):
 
   TX_MSGS = [[0x120, 0], [0x321, 2], [0x162, 2]]
   RELAY_MALFUNCTION_ADDRS = {0: (0x120,), 2: (0x321, 0x162)}
@@ -38,6 +38,9 @@ class TestRivianSafetyBase(common.CarSafetyTest, common.DriverTorqueSteeringSafe
 
   DRIVER_TORQUE_ALLOWANCE = 100
   DRIVER_TORQUE_FACTOR = 2
+
+  MIN_VALID_STEERING_FRAMES = 89
+  MAX_INVALID_STEERING_FRAMES = 2
 
   cnt_speed = 0
   cnt_speed_2 = 0
