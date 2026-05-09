@@ -9,8 +9,8 @@ from opendbc.car.rivian.values import CarControllerParams, RivianFlags
 from opendbc.sunnypilot.car.rivian.mads import MadsCarController
 
 MAX_ANGLE_DEG = 90
-MAX_ANGLE_FRAMES = 43
-BLIP_FRAMES = 1
+MAX_ANGLE_FRAMES = 89
+BLIP_FRAMES = 2
 
 
 class CarController(CarControllerBase, MadsCarController):
