@@ -22,7 +22,7 @@ class CarInterface(CarInterfaceBase):
     if 0x321 not in fingerprint[0]:
       ret.flags |= RivianFlags.GEN2.value
 
-    ret.steerActuatorDelay = 0.1
+    ret.steerActuatorDelay = 0.15
     ret.steerLimitTimer = 0.4
     CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 

@@ -24,31 +24,6 @@ from openpilot.system.hardware import PC
 
 from openpilot.sunnypilot.system.params_migration import run_migration
 
-LAST_COMMIT_FILE = "/data/.last_commit"
-BRANCH_RESET_PARAMS = [
-  "LiveTorqueParameters",
-  "CalibrationParams",
-  "LiveParameters",
-  "CarParamsCache",
-]
-
-
-def _reset_params_on_branch_change(params: "Params", git_commit: str) -> None:
-  if PC:
-    return
-  try:
-    with open(LAST_COMMIT_FILE) as f:
-      last_commit = f.read().strip()
-  except FileNotFoundError:
-    last_commit = None
-
-  if last_commit != git_commit:
-    cloudlog.info(f"AdventurePilot: commit changed {last_commit} -> {git_commit}, resetting params")
-    for k in BRANCH_RESET_PARAMS:
-      params.remove(k)
-    with open(LAST_COMMIT_FILE, "w") as f:
-      f.write(git_commit)
-
 
 def manager_init() -> None:
   save_bootlog()
@@ -56,7 +31,6 @@ def manager_init() -> None:
   build_metadata = get_build_metadata()
 
   params = Params()
-  _reset_params_on_branch_change(params, build_metadata.openpilot.git_commit)
   params.clear_all(ParamKeyFlag.CLEAR_ON_MANAGER_START)
   params.clear_all(ParamKeyFlag.CLEAR_ON_ONROAD_TRANSITION)
   params.clear_all(ParamKeyFlag.CLEAR_ON_OFFROAD_TRANSITION)
