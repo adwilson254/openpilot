@@ -107,6 +107,10 @@ static bool rivian_tx_hook(const CANPacket_t *msg) {
     .driver_torque_multiplier = 2,
     .driver_torque_allowance = 100,
     .type = TorqueDriverLimited,
+    .min_valid_request_frames = 43,
+    .max_invalid_request_frames = 1,
+    .min_valid_request_rt_interval = 400000,
+    .has_steer_req_tolerance = true,
   };
 
   const LongitudinalLimits RIVIAN_LONG_LIMITS = {
