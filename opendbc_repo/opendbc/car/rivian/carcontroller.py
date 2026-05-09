@@ -8,6 +8,7 @@ from opendbc.car.rivian.values import CarControllerParams, RivianFlags
 
 from opendbc.sunnypilot.car.rivian.mads import MadsCarController
 
+MAX_ANGLE_DEG = 90
 MAX_ANGLE_FRAMES = 89
 BLIP_FRAMES = 2
 
@@ -35,7 +36,7 @@ class CarController(CarControllerBase, MadsCarController):
                                                       CS.out.steeringTorque, CarControllerParams, steer_max)
 
     self.angle_limit_counter, lka_act_toi = common_fault_avoidance(
-      True,
+      abs(CS.out.steeringAngleDeg) >= MAX_ANGLE_DEG,
       self.mads.lat_active,
       self.angle_limit_counter,
       MAX_ANGLE_FRAMES,
