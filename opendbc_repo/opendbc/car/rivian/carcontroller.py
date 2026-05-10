@@ -11,8 +11,8 @@ from opendbc.sunnypilot.car.rivian.mads import MadsCarController
 MAX_ANGLE_DEG = 90
 MAX_ANGLE_FRAMES = 89
 BLIP_FRAMES = 2
-# Right turns require ~10% more torque to achieve equivalent lateral acceleration (measured asymmetry on R1T/R1S 2023)
-RIGHT_TURN_GAIN = 1.1
+# Right turns require more torque to achieve equivalent lateral acceleration (measured asymmetry on R1T/R1S 2023)
+RIGHT_TURN_GAIN = 1.2
 # Above this wheel angle the rack is saturated >75% of the time (route data); cap output so the
 # controller can recover from saturation faster when geometry eases
 HIGH_ANGLE_THRESHOLD_DEG = 90
