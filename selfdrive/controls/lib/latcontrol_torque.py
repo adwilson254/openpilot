@@ -24,7 +24,6 @@ from openpilot.sunnypilot.selfdrive.controls.lib.latcontrol_torque_ext import La
 
 KP = 0.8
 KI = 0.15
-RIGHT_TURN_PID_GAIN_BOOST = 1.10
 
 INTERP_SPEEDS = [1, 1.5, 2.0, 3.0, 5, 7.5, 10, 15, 30]
 KP_INTERP = [250, 120, 65, 30, 11.5, 5.5, 3.5, 2.0, KP]
@@ -96,8 +95,7 @@ class LatControlTorque(LatControl):
       pid_log.active = False
     else:
       # do error correction in lateral acceleration space, convert at end to handle non-linear torque responses correctly
-      right_turn_boost = RIGHT_TURN_PID_GAIN_BOOST if future_desired_lateral_accel < 0 else 1.0
-      pid_log.error = float(error * right_turn_boost)
+      pid_log.error = float(error)
 
       freeze_integrator = steer_limited_by_safety or CS.steeringPressed or CS.vEgo < 5
       output_lataccel = self.pid.update(pid_log.error, speed=CS.vEgo, feedforward=ff, freeze_integrator=freeze_integrator)
