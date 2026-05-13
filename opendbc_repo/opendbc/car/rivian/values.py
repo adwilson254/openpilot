@@ -125,7 +125,7 @@ class CarControllerParams:
   # TODO: it is theorized older models have different steering racks and achieve down to half the
   #  lateral acceleration referenced here at all speeds. detect this and ship a torque increase for those models
   STEER_MAX = 260  # cruise-speed floor of the lookup below
-  STEER_MAX_LOOKUP = [9, 16, 22, 28], [400, 340, 295, 260]
+  STEER_MAX_LOOKUP = [9, 16, 22, 28], [350, 340, 295, 260]
   STEER_STEP = 1
   STEER_DELTA_UP = 3  # torque increase per refresh
   STEER_DELTA_DOWN = 5  # torque decrease per refresh
