@@ -98,8 +98,8 @@ static bool rivian_tx_hook(const CANPacket_t *msg) {
     .max_torque = 350,
     .dynamic_max_torque = true,
     .max_torque_lookup = {
-      {9., 17., 17.},
-      {350, 300, 300},
+      {13., 22., 22.},
+      {350, 275, 275},
     },
     .max_rate_up = 3,
     .max_rate_down = 5,
