@@ -131,7 +131,7 @@ class CarControllerParams:
   # 10-17 m/s). Knee moved 17 -> 27 m/s so help extends through ~55 mph; floor identical.
   STEER_MAX_LOOKUP = [9, 13, 25, 27], [481, 415, 305, 275]
   STEER_STEP = 1
-  STEER_DELTA_UP = 4  # torque increase per refresh
+  STEER_DELTA_UP = 3  # torque increase per refresh
   STEER_DELTA_DOWN = 5  # torque decrease per refresh
   STEER_DRIVER_ALLOWANCE = 100  # allowed driver torque before start limiting
   STEER_DRIVER_MULTIPLIER = 2  # weight driver torque
