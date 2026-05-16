@@ -122,13 +122,16 @@ static void rivian_rx_hook(const CANPacket_t *msg) {
 
 static bool rivian_tx_hook(const CANPacket_t *msg) {
   const TorqueSteeringLimits RIVIAN_STEERING_LIMITS = {
-    .max_torque = 385,
+    .max_torque = 481,
     .dynamic_max_torque = true,
+    // 3-point envelope around the carcontroller's 4-point lookup
+    // ([9,13,25,27]->[481,415,305,275]). Safety must permit anything the software
+    // may send: this curve sits >= software at every speed (verified 9-27 m/s).
     .max_torque_lookup = {
-      {9., 17., 17.},
-      {385, 275, 275},
+      {9., 25., 27.},
+      {481, 305, 275},
     },
-    .max_rate_up = 3,
+    .max_rate_up = 4,
     .max_rate_down = 5,
     .max_rt_delta = 125,
     .driver_torque_multiplier = 2,

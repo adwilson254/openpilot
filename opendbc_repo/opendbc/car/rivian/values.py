@@ -124,8 +124,12 @@ class CarControllerParams:
   # 250 is ~2.8 m/s^2 above 17 m/s, then linearly ramps to ~1.6 m/s^2 from 17 m/s to 9 m/s
   # TODO: it is theorized older models have different steering racks and achieve down to half the
   #  lateral acceleration referenced here at all speeds. detect this and ship a torque increase for those models
-  STEER_MAX = 275  # 250 + 10%
-  STEER_MAX_LOOKUP = [9, 17], [385, 275]
+  STEER_MAX = 481  # peak of the lookup below; ~3.1 m/s^2 at 9 m/s
+  # 4-point lookup keeps the highway cap at 275 (unchanged from old [385,275]) but
+  # holds elevated torque through the 13-25 m/s band where the controller was running
+  # out of headroom (route 59cf9188505e2ef3|00000017--738eacca9c: 12.8% saturation at
+  # 10-17 m/s). Knee moved 17 -> 27 m/s so help extends through ~55 mph; floor identical.
+  STEER_MAX_LOOKUP = [9, 13, 25, 27], [481, 415, 305, 275]
   STEER_STEP = 1
   STEER_DELTA_UP = 4  # torque increase per refresh
   STEER_DELTA_DOWN = 5  # torque decrease per refresh
