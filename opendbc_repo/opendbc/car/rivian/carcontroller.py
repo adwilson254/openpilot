@@ -12,7 +12,6 @@ MAX_ANGLE_DEG = 90
 MAX_ANGLE_FRAMES = 89
 BLIP_FRAMES = 2
 # Right turns require more torque to achieve equivalent lateral acceleration (measured asymmetry on R1T/R1S 2023)
-RIGHT_TURN_GAIN = 1.2
 # Above this wheel angle the rack is saturated >75% of the time (route data); cap output so the
 # controller can recover from saturation faster when geometry eases
 HIGH_ANGLE_THRESHOLD_DEG = 90
@@ -38,8 +37,6 @@ class CarController(CarControllerBase, MadsCarController):
                                       CarControllerParams.STEER_MAX_LOOKUP[1])))
     if self.mads.lat_active:
       new_torque = int(round(CC.actuators.torque * steer_max))
-      if new_torque < 0:
-        new_torque = int(new_torque * RIGHT_TURN_GAIN)
       apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last,
                                                       CS.out.steeringTorque, CarControllerParams, steer_max)
       if abs(CS.out.steeringAngleDeg) > HIGH_ANGLE_THRESHOLD_DEG:
