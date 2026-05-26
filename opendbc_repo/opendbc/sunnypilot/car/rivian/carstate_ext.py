@@ -36,6 +36,7 @@ class CarStateExt:
     self._lkas_pending = False
     self.steering_mode_on_brake = read_steering_mode_param(CP, CP_SP, Params())
 
+    self._resume_enabled: bool = Params().get_bool("RivianResumeEnabled")
     self.last_active_set_speed: float | None = None
     self._prev_cruise_enabled: bool = False
     self._resume_eligible: bool = False
@@ -124,26 +125,28 @@ class CarStateExt:
       stalk_down = vdm_request in (3, 4)
 
       # Save set speed on ACC deactivation (before vEgoCluster reset so value is intact)
-      if self._prev_cruise_enabled and not ret.cruiseState.enabled:
-        self.last_active_set_speed = self.set_speed
-        self._resume_eligible = False
-        self._resume_acc_counter = 0
+      if self._resume_enabled:
+        if self._prev_cruise_enabled and not ret.cruiseState.enabled:
+          self.last_active_set_speed = self.set_speed
+          self._resume_eligible = False
+          self._resume_acc_counter = 0
 
       # Arm resume only on ACC rising edge while DOWN_2 is held
-      if not self._prev_cruise_enabled and ret.cruiseState.enabled and stalk_down2:
-        self._resume_eligible = True
-      # Also arm on DOWN_2 rising edge within ~100ms of ACC activation: handles the case
-      # where the stalk transitions through DOWN_1 before reaching DOWN_2 (~40-50ms delay
-      # observed in logs), so ACC activates while the stalk is still in DOWN_1 detent.
-      elif (ret.cruiseState.enabled and not self._prev_stalk_down2 and stalk_down2
-            and not self._resume_eligible and self._frames_since_acc_on < 10):
-        self._resume_eligible = True
-      # Also arm on first DOWN_2 press while ACC is on and speed is below minimum: handles
-      # stop-and-go where ACC has been engaged continuously (frames_since_acc_on > 10) and
-      # the driver presses DOWN_2 to resume to a previously set higher speed.
-      elif (ret.cruiseState.enabled and not self._prev_stalk_down2 and stalk_down2
-            and ret.vEgoCluster < MIN_SET_SPEED and not self._resume_eligible):
-        self._resume_eligible = True
+      if self._resume_enabled:
+        if not self._prev_cruise_enabled and ret.cruiseState.enabled and stalk_down2:
+          self._resume_eligible = True
+        # Also arm on DOWN_2 rising edge within ~100ms of ACC activation: handles the case
+        # where the stalk transitions through DOWN_1 before reaching DOWN_2 (~40-50ms delay
+        # observed in logs), so ACC activates while the stalk is still in DOWN_1 detent.
+        elif (ret.cruiseState.enabled and not self._prev_stalk_down2 and stalk_down2
+              and not self._resume_eligible and self._frames_since_acc_on < 10):
+          self._resume_eligible = True
+        # Also arm on first DOWN_2 press while ACC is on and speed is below minimum: handles
+        # stop-and-go where ACC has been engaged continuously (frames_since_acc_on > 10) and
+        # the driver presses DOWN_2 to resume to a previously set higher speed.
+        elif (ret.cruiseState.enabled and not self._prev_stalk_down2 and stalk_down2
+              and ret.vEgoCluster < MIN_SET_SPEED and not self._resume_eligible):
+          self._resume_eligible = True
 
       if not ret.cruiseState.enabled:
         self.set_speed = ret.vEgoCluster
@@ -158,7 +161,7 @@ class CarStateExt:
       self._frames_since_acc_on = (self._frames_since_acc_on + 1) if ret.cruiseState.enabled else 0
 
       # Resume: count consecutive frames where ACC is on and DOWN_2 is held after arming
-      if self._resume_eligible and ret.cruiseState.enabled and stalk_down2:
+      if self._resume_enabled and self._resume_eligible and ret.cruiseState.enabled and stalk_down2:
         self._resume_acc_counter += 1
       else:
         self._resume_acc_counter = 0

@@ -87,6 +87,11 @@ class CruiseLayout(Widget):
       description=tr("Enable toggle to allow the model to determine when to use sunnypilot ACC or sunnypilot End to End Longitudinal."),
       param="DynamicExperimentalControl")
 
+    self.rivian_resume_toggle = toggle_item_sp(
+      title=tr("Rivian: Enable Resume"),
+      description=tr('When enabled a full stalk down action held for at least 0.5s, provided activation of ACC is available on stock Rivian, will set the cruise speed to be equal to that from the last time cruise was deactivated. If cruise has never been activated it will set the cruise speed to the current vehicle speed. It is recommended to disable the stock Rivian feature: "Set to speed limit on divided highways", which uses the same activation mechanism.'),
+      param="RivianResumeEnabled")
+
     items = [
       self.icbm_toggle,
       self.dec_toggle,
@@ -95,6 +100,7 @@ class CruiseLayout(Widget):
       self.custom_acc_toggle,
       self.custom_acc_short_increment,
       self.custom_acc_long_increment,
+      self.rivian_resume_toggle,
       self.sla_settings_button,
     ]
     return items
@@ -157,10 +163,16 @@ class CruiseLayout(Widget):
         self.scc_v_toggle.action_item.set_enabled(False)
         self.scc_m_toggle.action_item.set_enabled(False)
 
+      is_rivian_long = ui_state.CP.brand == "rivian" and has_long
+      self.rivian_resume_toggle.action_item.set_enabled(is_rivian_long and ui_state.is_offroad())
+      if not is_rivian_long:
+        ui_state.params.remove("RivianResumeEnabled")
+
     else:
       has_icbm = has_long = False
       self.icbm_toggle.action_item.set_enabled(False)
       self.icbm_toggle.set_description(tr(ONROAD_ONLY_DESCRIPTION))
+      self.rivian_resume_toggle.action_item.set_enabled(False)
 
     show_custom_acc_desc = False
 
