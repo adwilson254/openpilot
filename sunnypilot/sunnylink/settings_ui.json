@@ -135,30 +135,20 @@
                         {
                           "type": "not",
                           "condition": {
-                            "type": "any",
+                            "type": "all",
                             "conditions": [
                               {
                                 "type": "capability",
                                 "field": "brand",
-                                "equals": "rivian"
+                                "equals": "tesla"
                               },
                               {
-                                "type": "all",
-                                "conditions": [
-                                  {
-                                    "type": "capability",
-                                    "field": "brand",
-                                    "equals": "tesla"
-                                  },
-                                  {
-                                    "type": "not",
-                                    "condition": {
-                                      "type": "capability",
-                                      "field": "tesla_has_vehicle_bus",
-                                      "equals": true
-                                    }
-                                  }
-                                ]
+                                "type": "not",
+                                "condition": {
+                                  "type": "capability",
+                                  "field": "tesla_has_vehicle_bus",
+                                  "equals": true
+                                }
                               }
                             ]
                           }
@@ -172,30 +162,20 @@
                         {
                           "type": "not",
                           "condition": {
-                            "type": "any",
+                            "type": "all",
                             "conditions": [
                               {
                                 "type": "capability",
                                 "field": "brand",
-                                "equals": "rivian"
+                                "equals": "tesla"
                               },
                               {
-                                "type": "all",
-                                "conditions": [
-                                  {
-                                    "type": "capability",
-                                    "field": "brand",
-                                    "equals": "tesla"
-                                  },
-                                  {
-                                    "type": "not",
-                                    "condition": {
-                                      "type": "capability",
-                                      "field": "tesla_has_vehicle_bus",
-                                      "equals": true
-                                    }
-                                  }
-                                ]
+                                "type": "not",
+                                "condition": {
+                                  "type": "capability",
+                                  "field": "tesla_has_vehicle_bus",
+                                  "equals": true
+                                }
                               }
                             ]
                           }
@@ -2125,6 +2105,28 @@
     }
   ],
   "vehicle_settings": {
+    "rivian": {
+      "title": "Rivian Settings",
+      "description": "",
+      "items": [
+        {
+          "key": "RivianResumeEnabled",
+          "widget": "toggle",
+          "title": "Rivian: Enable Resume",
+          "description": "When enabled a full stalk down action held for at least 0.5s, provided activation of ACC is available on stock Rivian, will set the cruise speed to be equal to that from the last time cruise was deactivated. If cruise has never been activated it will set the cruise speed to the current vehicle speed. It is recommended to disable the stock Rivian feature: \"Set to speed limit on divided highways\", which uses the same activation mechanism.",
+          "enablement": [
+            {
+              "type": "offroad_only"
+            },
+            {
+              "type": "capability",
+              "field": "has_longitudinal_control",
+              "equals": true
+            }
+          ]
+        }
+      ]
+    },
     "hyundai": {
       "title": "Hyundai / Kia / Genesis Settings",
       "description": "",

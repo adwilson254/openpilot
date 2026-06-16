@@ -48,8 +48,7 @@ class CarState(CarStateBase, CarStateExt):
 
     # EPAS_HandsOnLevel: 1 = normal/hands-on; any other value is a car-reported hands-off fault
     hands_on_level = cp.vl["EPAS_SystemStatus"]["EPAS_HandsOnLevel"]
-    ret.steerFaultTemporary = (cp.vl["EPAS_SystemStatus"]["H_CAN_EPSS_ToiFlt"] != 0 or
-                               hands_on_level != 1)
+    ret.steerFaultTemporary = cp.vl["EPAS_SystemStatus"]["H_CAN_EPSS_ToiFlt"] != 0 or hands_on_level != 1
 
     # Cruise state
     speed = min(int(cp_adas.vl["ACM_tsrCmd"]["ACM_tsrSpdDisClsMain"]), 85)
