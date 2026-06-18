@@ -4,7 +4,7 @@ import http.server
 import socketserver
 import logging
 
-PORT = 8080
+PORT = 8081
 
 def main():
     logging.basicConfig(level=logging.INFO)
