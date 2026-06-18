@@ -38,14 +38,8 @@ class RivianAPI:
         mutation CreateCSRFToken {
             createCsrfToken {
                 __typename
-                ... on CsrfToken {
-                    csrfToken
-                    appSessionToken
-                }
-                ... on DefaultError {
-                    message
-                    code
-                }
+                csrfToken
+                appSessionToken
             }
         }
         """
@@ -63,7 +57,10 @@ class RivianAPI:
         })
 
         resp = self.session.post(RIVIAN_GRAPHQL_URL, json=payload)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            raise Exception(f"HTTP Error {resp.status_code}: {resp.text}") from e
         data = resp.json()
         
         result = data.get("data", {}).get("createCsrfToken", {})
@@ -85,17 +82,13 @@ class RivianAPI:
         mutation Login($email: String!, $password: String!) {
             login(email: $email, password: $password) {
                 __typename
-                ... on Login {
+                ... on MobileLoginResponse {
                     accessToken
                     refreshToken
                     userSessionToken
                 }
-                ... on OtpLogin {
+                ... on MobileMFALoginResponse {
                     otpToken
-                }
-                ... on DefaultError {
-                    message
-                    code
                 }
             }
         }
@@ -107,15 +100,18 @@ class RivianAPI:
         }
 
         resp = self.session.post(RIVIAN_GRAPHQL_URL, json=payload)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            raise Exception(f"HTTP Error {resp.status_code}: {resp.text}") from e
         data = resp.json()
 
         result = data.get("data", {}).get("login", {})
         
-        if result.get("__typename") == "Login":
+        if result.get("__typename") == "MobileLoginResponse":
             self._save_tokens(result["accessToken"], result["refreshToken"])
             return {"status": "success"}
-        elif result.get("__typename") == "OtpLogin":
+        elif result.get("__typename") == "MobileMFALoginResponse":
             self.otp_token = result["otpToken"]
             return {"status": "mfa_required"}
         else:
@@ -129,14 +125,10 @@ class RivianAPI:
         mutation LoginWithOTP($otpCode: String!, $otpToken: String!) {
             loginWithOtp(otpCode: $otpCode, otpToken: $otpToken) {
                 __typename
-                ... on Login {
+                ... on MobileLoginResponse {
                     accessToken
                     refreshToken
                     userSessionToken
-                }
-                ... on DefaultError {
-                    message
-                    code
                 }
             }
         }
@@ -148,12 +140,15 @@ class RivianAPI:
         }
 
         resp = self.session.post(RIVIAN_GRAPHQL_URL, json=payload)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            raise Exception(f"HTTP Error {resp.status_code}: {resp.text}") from e
         data = resp.json()
 
         result = data.get("data", {}).get("loginWithOtp", {})
         
-        if result.get("__typename") == "Login":
+        if result.get("__typename") == "MobileLoginResponse":
             self._save_tokens(result["accessToken"], result["refreshToken"])
             return {"status": "success"}
         else:
@@ -177,5 +172,8 @@ class RivianAPI:
         """
         payload = {"operationName": "GetUser", "query": query, "variables": {}}
         resp = self.session.post(RIVIAN_GRAPHQL_URL, json=payload)
-        resp.raise_for_status()
+        try:
+            resp.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            raise Exception(f"HTTP Error {resp.status_code}: {resp.text}") from e
         return resp.json()
