@@ -60,24 +60,22 @@ function renderItem(item, settings, onUpdateSetting) {
   return null;
 }
 
-function SettingsView({ activeCategory, setActiveCategory, settings, onUpdateSetting }) {
-  const categories = Object.keys(settingsUISchema).filter(k => k !== "Device");
+function SettingsView({ activePanelId, setActivePanelId, settings, onUpdateSetting }) {
+  const panels = settingsUISchema.panels || [];
   
-  const currentCategoryData = settingsUISchema[activeCategory];
-  if (!currentCategoryData) return <div>Select a category</div>;
+  const currentPanel = panels.find(p => p.id === activePanelId);
 
   return (
     <div className="app-layout">
       {/* Sidebar Navigation */}
       <div className="app-sidebar">
-        {categories.map(cat => (
+        {panels.map(panel => (
           <div 
-            key={cat}
-            className={`nav-item ${activeCategory === cat ? 'active' : ''}`}
-            onClick={() => setActiveCategory(cat)}
+            key={panel.id}
+            className={`nav-item ${activePanelId === panel.id ? 'active' : ''}`}
+            onClick={() => setActivePanelId(panel.id)}
           >
-            {settingsUISchema[cat].icon && <span style={{fontSize: '1.2rem'}}>{settingsUISchema[cat].icon}</span>}
-            {settingsUISchema[cat].title || cat}
+            {panel.label}
           </div>
         ))}
       </div>
@@ -85,16 +83,26 @@ function SettingsView({ activeCategory, setActiveCategory, settings, onUpdateSet
       {/* Main Settings Content */}
       <div className="app-main">
         <div className="app-content">
-          <div className="cel-card" style={{ width: '100%', marginBottom: '2rem' }}>
-            <h1 style={{ margin: 0, fontWeight: 900 }}>{currentCategoryData.title || activeCategory}</h1>
-          </div>
-          
-          <div className="cel-card" style={{ width: '100%', padding: '2rem' }}>
-            {currentCategoryData.items.map(item => {
-              if (item.key) return renderItem(item, settings, onUpdateSetting);
-              return null;
-            })}
-          </div>
+          {!currentPanel ? <div>Select a category</div> : (
+            <>
+              <div className="cel-card" style={{ width: '100%', marginBottom: '2rem' }}>
+                <h1 style={{ margin: 0, fontWeight: 900 }}>{currentPanel.label}</h1>
+                {currentPanel.description && <p style={{ color: '#666', marginTop: '0.5rem' }}>{currentPanel.description}</p>}
+              </div>
+              
+              <div className="cel-card" style={{ width: '100%', padding: '2rem' }}>
+                {currentPanel.sections?.map(section => (
+                  <div key={section.id} style={{ marginBottom: '2rem' }}>
+                    {section.title && <h2 style={{ borderBottom: '2px solid #1A1A1A', paddingBottom: '0.5rem', marginBottom: '1rem' }}>{section.title}</h2>}
+                    {section.items?.map(item => {
+                      if (item.key) return renderItem(item, settings, onUpdateSetting);
+                      return null;
+                    })}
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -108,7 +116,7 @@ function App() {
   
   // Tab Routing: "dashcam", "settings", "history", "controls"
   const [activeTab, setActiveTab] = useState("dashcam");
-  const [activeCategory, setActiveCategory] = useState("Steering");
+  const [activePanelId, setActivePanelId] = useState("steering");
 
   useEffect(() => {
     const host = window.location.hostname === 'localhost' ? '192.168.0.233' : window.location.hostname;
@@ -199,8 +207,8 @@ function App() {
         {activeTab === 'dashcam' && <Dashcam telemetry={telemetry} />}
         {activeTab === 'settings' && (
           <SettingsView 
-            activeCategory={activeCategory} 
-            setActiveCategory={setActiveCategory} 
+            activePanelId={activePanelId} 
+            setActivePanelId={setActivePanelId} 
             settings={settings} 
             onUpdateSetting={handleUpdateSetting} 
           />
