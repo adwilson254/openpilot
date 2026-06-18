@@ -20,18 +20,41 @@ class RivianAPI:
 
     def _load_tokens(self):
         acc = self.params.get("RivianAccessToken")
-        ref = self.params.get("RivianRefreshToken")
-        self.access_token = acc.decode("utf-8") if acc else None
-        self.refresh_token = ref.decode("utf-8") if ref else None
-        if self.access_token:
+        if acc:
+            try:
+                tokens = json.loads(acc.decode("utf-8"))
+                self.access_token = tokens.get("accessToken")
+                self.refresh_token = tokens.get("refreshToken")
+                self.user_session_token = tokens.get("userSessionToken")
+            except json.JSONDecodeError:
+                # Fallback for old tokens
+                self.access_token = acc.decode("utf-8")
+                self.refresh_token = self.params.get("RivianRefreshToken").decode("utf-8") if self.params.get("RivianRefreshToken") else None
+                self.user_session_token = None
+        else:
+            self.access_token = None
+            self.refresh_token = None
+            self.user_session_token = None
+            
+        if self.user_session_token:
+            self.session.headers.update({"u-sess": self.user_session_token})
+        elif self.access_token:
             self.session.headers.update({"Authorization": f"Bearer {self.access_token}"})
 
-    def _save_tokens(self, access_token, refresh_token):
+    def _save_tokens(self, access_token, refresh_token, user_session_token):
         self.access_token = access_token
         self.refresh_token = refresh_token
-        self.params.put("RivianAccessToken", access_token)
-        self.params.put("RivianRefreshToken", refresh_token)
-        self.session.headers.update({"Authorization": f"Bearer {self.access_token}"})
+        self.user_session_token = user_session_token
+        
+        tokens_json = json.dumps({
+            "accessToken": access_token,
+            "refreshToken": refresh_token,
+            "userSessionToken": user_session_token
+        })
+        self.params.put("RivianAccessToken", tokens_json)
+        
+        if self.user_session_token:
+            self.session.headers.update({"u-sess": self.user_session_token})
 
     def create_csrf_token(self):
         query = """
@@ -123,7 +146,7 @@ class RivianAPI:
         result = result.get("login", {})
         
         if result.get("__typename") == "MobileLoginResponse":
-            self._save_tokens(result["accessToken"], result["refreshToken"])
+            self._save_tokens(result["accessToken"], result["refreshToken"], result["userSessionToken"])
             return {"status": "success"}
         elif result.get("__typename") == "MobileMFALoginResponse":
             self.otp_token = result["otpToken"]
@@ -171,7 +194,7 @@ class RivianAPI:
         result = result.get("loginWithOTPV2", {})
         
         if result.get("__typename") == "MobileLoginResponse":
-            self._save_tokens(result["accessToken"], result["refreshToken"])
+            self._save_tokens(result["accessToken"], result["refreshToken"], result["userSessionToken"])
             return {"status": "success"}
         else:
             raise Exception(f"MFA Login failed: {result}")
@@ -180,6 +203,9 @@ class RivianAPI:
         return self.access_token is not None
 
     def get_user_info(self):
+        if not self.create_csrf_token():
+            raise Exception("Failed to acquire CSRF token for user info request")
+            
         query = """
         query GetUser {
             currentUser {
