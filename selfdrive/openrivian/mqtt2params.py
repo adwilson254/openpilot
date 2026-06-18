@@ -45,16 +45,16 @@ def on_message(client, userdata, msg):
         payload = json.loads(msg.payload.decode())
         val = payload.get("value")
         
-        # READ-ONLY MODE ENFORCED
-        logging.info(f"READ-ONLY MODE: Would have updated Param '{param_name}' to {val}")
-        # if isinstance(val, bool):
-        #     params.put_bool(param_name, val)
-        # elif isinstance(val, (int, float)):
-        #     params.put(param_name, str(val).encode('utf-8'))
-        # elif isinstance(val, str):
-        #     params.put(param_name, val.encode('utf-8'))
+        # Writes Enabled
+        logging.info(f"Writing Param '{param_name}' to {val}")
+        if isinstance(val, bool):
+            params.put_bool(param_name, val)
+        elif isinstance(val, (int, float)):
+            params.put(param_name, str(val).encode('utf-8'))
+        elif isinstance(val, str):
+            params.put(param_name, val.encode('utf-8'))
         
-        # Echo the new status back to MQTT so UI updates temporarily
+        # Echo the new status back to MQTT so UI updates
         client.publish(f"openrivian/settings/status/{param_name}", json.dumps({"value": val}), retain=True)
         
     except Exception as e:
