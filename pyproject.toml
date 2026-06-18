@@ -13,6 +13,7 @@ dependencies = [
   "sounddevice",  # micd + soundd
   "pyserial",     # pigeond + qcomgpsd
   "requests",     # many one-off uses
+  "paho-mqtt",    # used by OpenRivian components
   "sympy",        # rednose + friends
   "crcmod-plus",  # cars + qcomgpsd
   "tqdm",         # cars (fw_versions.py) on start + many one-off uses
