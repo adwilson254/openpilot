@@ -19,8 +19,10 @@ class RivianAPI:
         self._load_tokens()
 
     def _load_tokens(self):
-        self.access_token = self.params.get("RivianAccessToken", encoding="utf8")
-        self.refresh_token = self.params.get("RivianRefreshToken", encoding="utf8")
+        acc = self.params.get("RivianAccessToken")
+        ref = self.params.get("RivianRefreshToken")
+        self.access_token = acc.decode("utf-8") if acc else None
+        self.refresh_token = ref.decode("utf-8") if ref else None
         if self.access_token:
             self.session.headers.update({"Authorization": f"Bearer {self.access_token}"})
 
