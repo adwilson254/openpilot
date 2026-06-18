@@ -13,7 +13,7 @@ class RivianAPI:
         self.session.headers.update({
             "Content-Type": "application/json",
             "User-Agent": "OpenRivian/1.0",
-            "Apollographql-Client-Name": "com.rivian.ios.consumer",
+            "Apollographql-Client-Name": "com.rivian.android.consumer",
             "Apollographql-Client-Version": "2.10.0"
         })
         self._load_tokens()
