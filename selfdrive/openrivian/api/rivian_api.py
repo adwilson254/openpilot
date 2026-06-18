@@ -127,6 +127,7 @@ class RivianAPI:
             return {"status": "success"}
         elif result.get("__typename") == "MobileMFALoginResponse":
             self.otp_token = result["otpToken"]
+            self.email = email
             return {"status": "mfa_required"}
         else:
             raise Exception(f"Login failed: {result}")
@@ -136,8 +137,8 @@ class RivianAPI:
             raise Exception("No active MFA session. Call login() first.")
 
         query = """
-        mutation LoginWithOTP($otpCode: String!, $otpToken: String!) {
-            loginWithOtp(otpCode: $otpCode, otpToken: $otpToken) {
+        mutation LoginWithOTP($email: String!, $otpCode: String!, $otpToken: String!) {
+            loginWithOTPV2(email: $email, otpCode: $otpCode, otpToken: $otpToken) {
                 __typename
                 ... on MobileLoginResponse {
                     accessToken
@@ -150,7 +151,7 @@ class RivianAPI:
         payload = {
             "operationName": "LoginWithOTP",
             "query": query,
-            "variables": {"otpCode": otp_code, "otpToken": self.otp_token}
+            "variables": {"email": self.email, "otpCode": otp_code, "otpToken": self.otp_token}
         }
 
         resp = self.session.post(RIVIAN_GRAPHQL_URL, json=payload)
@@ -167,7 +168,7 @@ class RivianAPI:
         if not result:
             raise Exception("GraphQL response contained no data.")
             
-        result = result.get("loginWithOtp", {})
+        result = result.get("loginWithOTPV2", {})
         
         if result.get("__typename") == "MobileLoginResponse":
             self._save_tokens(result["accessToken"], result["refreshToken"])
