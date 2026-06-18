@@ -1,0 +1,38 @@
+name: Nightly Upstream Sync
+
+on:
+  schedule:
+    # Run every night at midnight UTC
+    - cron: '0 0 * * *'
+  workflow_dispatch: # Allows you to manually trigger the sync from the GitHub UI
+
+jobs:
+  sync_clean_branch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout OpenRivian
+        uses: actions/checkout@v4
+        with:
+          ref: clean
+          fetch-depth: 0 # Fetch all history so merge works correctly
+          
+      - name: Add upstream remote
+        run: git remote add upstream https://github.com/adventurepilotdev/ap-dev.git
+        
+      - name: Fetch upstream
+        run: git fetch upstream ap-dev
+        
+      - name: Sync clean branch
+        run: |
+          # Ensure we are on the clean branch
+          git checkout clean
+          
+          # Configure git so merge doesn't complain
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          
+          # Fast-forward merge the upstream's branch into our clean branch
+          git merge upstream/ap-dev --ff-only
+          
+          # Push the updated branch back to our origin
+          git push origin clean
