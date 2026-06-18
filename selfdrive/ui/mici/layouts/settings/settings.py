@@ -46,13 +46,13 @@ class SettingsLayout(NavScroller):
 
     self._scroller.add_widgets([
       toggles_btn,
+      openrivian_btn,
       network_btn,
       device_btn,
       PairBigButton(),
       #BigDialogButton("manual", "", "icons_mici/settings/manual_icon.png", "Check out the mici user\nmanual at comma.ai/setup"),
       firehose_btn,
       developer_btn,
-      openrivian_btn,
     ])
 
     self._font_medium = gui_app.font(FontWeight.MEDIUM)
