@@ -76,7 +76,8 @@ class BigInputDialog(BigDialogBase):
                default_text: str = "",
                minimum_length: int = 1,
                confirm_callback: Callable[[str], None] | None = None,
-               auto_return_to_letters: str = ""):
+               auto_return_to_letters: str = "",
+               password_mode: bool = False):
     super().__init__()
     self._hint_label = UnifiedLabel(hint, font_size=35, text_color=rl.Color(255, 255, 255, int(255 * 0.35)),
                                     font_weight=FontWeight.MEDIUM)
@@ -84,6 +85,7 @@ class BigInputDialog(BigDialogBase):
     self._keyboard.set_text(default_text)
     self._keyboard.set_enabled(lambda: self.enabled and not self.is_dismissing)  # for nav stack + NavWidget
     self._minimum_length = minimum_length
+    self._password_mode = password_mode
 
     self._backspace_held_time: float | None = None
 
@@ -125,8 +127,11 @@ class BigInputDialog(BigDialogBase):
   def _render(self, _):
     # draw current text so far below everything. text floats left but always stays in view
     text = self._keyboard.text()
+    display_text = "•" * len(text) if self._password_mode else text
     candidate_char = self._keyboard.get_candidate_character()
-    text_size = measure_text_cached(gui_app.font(FontWeight.ROMAN), text + candidate_char or self._hint_label.text, self.TEXT_INPUT_SIZE)
+    display_candidate_char = "•" if self._password_mode and candidate_char else candidate_char
+    
+    text_size = measure_text_cached(gui_app.font(FontWeight.ROMAN), display_text + display_candidate_char or self._hint_label.text, self.TEXT_INPUT_SIZE)
 
     bg_block_margin = 5
     text_x = PADDING / 2 + self._enter_img.width + PADDING
@@ -140,12 +145,12 @@ class BigInputDialog(BigDialogBase):
       text_x -= text_size.x - text_field_rect.width
 
     rl.begin_scissor_mode(int(text_field_rect.x), int(text_field_rect.y), int(text_field_rect.width), int(text_field_rect.height))
-    rl.draw_text_ex(gui_app.font(FontWeight.ROMAN), text, rl.Vector2(text_x, text_field_rect.y), self.TEXT_INPUT_SIZE, 0, rl.WHITE)
+    rl.draw_text_ex(gui_app.font(FontWeight.ROMAN), display_text, rl.Vector2(text_x, text_field_rect.y), self.TEXT_INPUT_SIZE, 0, rl.WHITE)
 
     # draw grayed out character user is hovering over
-    if candidate_char:
-      candidate_char_size = measure_text_cached(gui_app.font(FontWeight.ROMAN), candidate_char, self.TEXT_INPUT_SIZE)
-      rl.draw_text_ex(gui_app.font(FontWeight.ROMAN), candidate_char,
+    if display_candidate_char:
+      candidate_char_size = measure_text_cached(gui_app.font(FontWeight.ROMAN), display_candidate_char, self.TEXT_INPUT_SIZE)
+      rl.draw_text_ex(gui_app.font(FontWeight.ROMAN), display_candidate_char,
                       rl.Vector2(min(text_x + text_size.x, text_field_rect.x + text_field_rect.width) - candidate_char_size.x, text_field_rect.y),
                       self.TEXT_INPUT_SIZE, 0, rl.Color(255, 255, 255, 128))
 
@@ -171,7 +176,7 @@ class BigInputDialog(BigDialogBase):
       color = rl.Color(255, 255, 255, int(self._backspace_img_alpha.x))
       rl.draw_texture_ex(self._backspace_img, rl.Vector2(self._rect.width - self._backspace_img.width - 27, self._rect.y + 14), 0.0, 1.0, color)
 
-    if not text and self._hint_label.text and not candidate_char:
+    if not text and self._hint_label.text and not display_candidate_char:
       # draw description if no text entered yet and not drawing candidate char
       hint_rect = rl.Rectangle(text_field_rect.x, text_field_rect.y,
                                self._rect.width - text_field_rect.x - PADDING,
