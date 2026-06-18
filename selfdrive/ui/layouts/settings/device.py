@@ -67,6 +67,7 @@ class DeviceLayout(Widget):
                   self._on_review_training_guide, enabled=ui_state.is_offroad),
       button_item(lambda: tr("Regulatory"), lambda: tr("VIEW"), callback=self._on_regulatory, enabled=ui_state.is_offroad),
       button_item(lambda: tr("Change Language"), lambda: tr("CHANGE"), callback=self._show_language_dialog),
+      button_item(lambda: tr("Rivian Account"), lambda: tr("LOGIN"), lambda: tr("Authenticate with your Rivian account to enable ABRP routes and API features."), callback=self._on_rivian_login),
       self._power_off_btn,
     ]
     return items
@@ -195,3 +196,45 @@ class DeviceLayout(Widget):
     if not self._training_guide:
       self._training_guide = TrainingGuide()
     gui_app.push_widget(self._training_guide)
+
+  def _on_rivian_login(self):
+    from openpilot.system.ui.widgets.keyboard import Keyboard
+    from openpilot.system.ui.widgets import DialogResult
+    from openpilot.selfdrive.openrivian.api.rivian_api import RivianAPI
+    
+    email_kb = Keyboard(show_password_toggle=False)
+    email_kb.set_title("Rivian Login", "Enter your Rivian account email")
+    
+    def email_cb(res1):
+      if res1 == DialogResult.CONFIRM:
+        email = email_kb.text
+        password_kb = Keyboard(show_password_toggle=True, password_mode=True)
+        password_kb.set_title("Rivian Login", "Enter your Rivian password")
+        
+        def pass_cb(res2):
+          if res2 == DialogResult.CONFIRM:
+            password = password_kb.text
+            try:
+              api = RivianAPI()
+              auth_res = api.login(email, password)
+              if auth_res["status"] == "mfa_required":
+                otp_kb = Keyboard(max_text_size=6)
+                otp_kb.set_title("Rivian 2FA", "Enter the 6-digit SMS code")
+                def otp_cb(res3):
+                  if res3 == DialogResult.CONFIRM:
+                    try:
+                      mfa_res = api.login_with_otp(otp_kb.text)
+                      if mfa_res["status"] == "success":
+                        gui_app.push_widget(alert_dialog("Rivian Authentication Successful!"))
+                    except Exception as e:
+                      gui_app.push_widget(alert_dialog(f"MFA Failed: {e}"))
+                otp_kb.set_callback(otp_cb)
+                gui_app.push_widget(otp_kb)
+              else:
+                gui_app.push_widget(alert_dialog("Rivian Authentication Successful!"))
+            except Exception as e:
+              gui_app.push_widget(alert_dialog(f"Login Failed: {e}"))
+        password_kb.set_callback(pass_cb)
+        gui_app.push_widget(password_kb)
+    email_kb.set_callback(email_cb)
+    gui_app.push_widget(email_kb)

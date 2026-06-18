@@ -181,6 +181,9 @@ procs += [
 
   # locationd
   NativeProcess("locationd_llk", "sunnypilot/selfdrive/locationd", ["./locationd"], only_onroad),
+
+  # OpenRivian
+  PythonProcess("openriviand", "selfdrive.openrivian.api.openriviand", always_run),
 ]
 
 if os.path.exists("./github_runner.sh"):
