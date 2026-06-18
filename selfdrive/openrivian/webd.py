@@ -37,8 +37,22 @@ def main():
                 
                 try:
                     import urllib.request
+                    import json
+                    
+                    # Parse incoming React SDP offer
+                    client_offer = json.loads(post_data.decode('utf-8'))
+                    
+                    # webrtcd expects a fully populated StreamRequestBody
+                    webrtcd_payload = {
+                        "sdp": client_offer.get("sdp", ""),
+                        "cameras": ["road"],
+                        "bridge_services_in": [],
+                        "bridge_services_out": ["carState", "modelV2"]
+                    }
+                    webrtcd_post_data = json.dumps(webrtcd_payload).encode('utf-8')
+                    
                     # Proxy the request to local webrtcd (port 5001)
-                    req = urllib.request.Request("http://localhost:5001/stream", data=post_data, headers={'Content-Type': 'application/json'})
+                    req = urllib.request.Request("http://localhost:5001/stream", data=webrtcd_post_data, headers={'Content-Type': 'application/json'})
                     with urllib.request.urlopen(req) as response:
                         res_body = response.read()
                         self.send_response(response.getcode())
@@ -48,7 +62,7 @@ def main():
                 except Exception as e:
                     self.send_response(500)
                     self.end_headers()
-                    self.wfile.write(f'{{"error": "{str(e)}"}}'.encode('utf-8'))
+                    self.wfile.write(f'{{"error": "HTTP Error 500: {str(e)}"}}'.encode('utf-8'))
             else:
                 self.send_response(404)
                 self.end_headers()
