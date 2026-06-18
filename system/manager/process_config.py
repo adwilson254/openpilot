@@ -186,6 +186,8 @@ procs += [
   PythonProcess("openriviand", "selfdrive.openrivian.api.openriviand", always_run),
   PythonProcess("mqttd", "selfdrive.openrivian.mqttd", always_run),
   PythonProcess("cereal2mqtt", "selfdrive.openrivian.cereal2mqtt", always_run),
+  PythonProcess("mqtt2params", "selfdrive.openrivian.mqtt2params", always_run),
+  PythonProcess("webd", "selfdrive.openrivian.webd", always_run),
 ]
 
 if os.path.exists("./github_runner.sh"):

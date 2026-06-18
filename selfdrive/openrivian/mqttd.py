@@ -12,6 +12,11 @@ config = {
             'type': 'tcp',
             'bind': '0.0.0.0:1883',
             'max_connections': 1000,
+        },
+        'ws-default': {
+            'type': 'ws',
+            'bind': '0.0.0.0:9001',
+            'max_connections': 1000,
         }
     },
     'sys_interval': 10,
