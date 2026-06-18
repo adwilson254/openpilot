@@ -60,26 +60,31 @@ def on_message(client, userdata, msg):
     except Exception as e:
         logging.error(f"Failed to set param {msg.topic}: {e}")
 
+last_published_values = {}
+
 def publish_all_params(client):
     for param in PARAMS_WHITELIST:
         # Get raw bytes
         val_bytes = params.get(param)
-        if val_bytes is None:
-            continue
-            
-        # Try to decode boolean/string
-        val_str = val_bytes.decode('utf-8', errors='ignore')
-        if val_str == "1":
-            val = True
-        elif val_str == "0":
-            val = False
-        else:
-            try:
-                val = float(val_str)
-            except ValueError:
-                val = val_str
-                
-        client.publish(f"openrivian/settings/status/{param}", json.dumps({"value": val}), retain=True)
+        val = None
+        
+        if val_bytes is not None:
+            # Try to decode boolean/string
+            val_str = val_bytes.decode('utf-8', errors='ignore')
+            if val_str == "1":
+                val = True
+            elif val_str == "0":
+                val = False
+            else:
+                try:
+                    val = float(val_str)
+                except ValueError:
+                    val = val_str
+                    
+        # Only publish if the value has changed since last time, to avoid spamming 1400 messages every 5 seconds
+        if last_published_values.get(param) != val:
+            client.publish(f"openrivian/settings/status/{param}", json.dumps({"value": val}), retain=True)
+            last_published_values[param] = val
 
 def main():
     logging.basicConfig(level=logging.INFO)
