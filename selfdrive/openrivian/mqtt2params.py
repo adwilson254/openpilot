@@ -15,17 +15,14 @@ MQTT_PORT = 1883
 
 params = Params()
 
-# Whitelist of params we want to expose to the dashboard
-# Includes both Openpilot standard and Sunnypilot custom params
-PARAMS_WHITELIST = [
-    "OpenpilotEnabled",
-    "IsLdwEnabled",
-    "UseMetric",
-    "MadsEnabled",
-    "CustomSpeedLimitControl",
-    "DynamicLaneProfile",
-    "EndToEndToggle"
-]
+PARAMS_META_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../sunnypilot/sunnylink/params_metadata.json"))
+try:
+    with open(PARAMS_META_PATH, "r") as f:
+        metadata = json.load(f)
+        PARAMS_WHITELIST = list(metadata.keys())
+except Exception as e:
+    logging.error(f"Failed to load params metadata: {e}")
+    PARAMS_WHITELIST = []
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -48,16 +45,16 @@ def on_message(client, userdata, msg):
         payload = json.loads(msg.payload.decode())
         val = payload.get("value")
         
-        if isinstance(val, bool):
-            params.put_bool(param_name, val)
-        elif isinstance(val, (int, float)):
-            params.put(param_name, str(val).encode('utf-8'))
-        elif isinstance(val, str):
-            params.put(param_name, val.encode('utf-8'))
-            
-        logging.info(f"Updated Param '{param_name}' to {val}")
+        # READ-ONLY MODE ENFORCED
+        logging.info(f"READ-ONLY MODE: Would have updated Param '{param_name}' to {val}")
+        # if isinstance(val, bool):
+        #     params.put_bool(param_name, val)
+        # elif isinstance(val, (int, float)):
+        #     params.put(param_name, str(val).encode('utf-8'))
+        # elif isinstance(val, str):
+        #     params.put(param_name, val.encode('utf-8'))
         
-        # Echo the new status back to MQTT
+        # Echo the new status back to MQTT so UI updates temporarily
         client.publish(f"openrivian/settings/status/{param_name}", json.dumps({"value": val}), retain=True)
         
     except Exception as e:
