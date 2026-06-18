@@ -87,7 +87,7 @@ def publish_all_params(client):
                     
         # Only publish if the value has changed since last time, to avoid spamming 1400 messages every 5 seconds
         if last_published_values.get(param) != val:
-            client.publish(f"openrivian/settings/status/{param}", json.dumps({"value": val}), retain=True)
+            client.publish(f"openrivian/settings/status/{param}", json.dumps({"value": val}, default=str), retain=True)
             last_published_values[param] = val
 
 def main():
