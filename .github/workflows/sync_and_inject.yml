@@ -1,0 +1,51 @@
+name: Nightly Upstream Sync & Inject
+
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync_and_inject:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout OpenRivian (clean branch)
+        uses: actions/checkout@v4
+        with:
+          ref: clean
+          fetch-depth: 0
+          
+      - name: Setup Git User
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Fetch Upstream
+        run: |
+          git remote add upstream https://github.com/adventurepilotdev/ap-dev.git
+          git fetch upstream ap-dev
+          
+      - name: Sync clean branch
+        run: |
+          git checkout clean
+          git merge upstream/ap-dev --ff-only
+          
+      - name: Inject into dev branch
+        run: |
+          # Checkout dev
+          git checkout dev || git checkout -b dev
+          git merge clean -m "Merge clean into dev"
+          
+          # Run the Python injection script
+          python selfdrive/ui/openrivian/scripts/inject.py
+          
+          # Add any injected changes and commit
+          git add system/ui/spinner.py
+          git diff --staged --quiet || git commit -m "[bot] Inject OpenRivian hooks"
+
+      - name: Push branches
+        run: |
+          git push origin clean
+          git push origin dev
