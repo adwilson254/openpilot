@@ -19,10 +19,40 @@ def main():
     os.chdir(web_dir)
     
     # Simple HTTP request handler
-    Handler = http.server.SimpleHTTPRequestHandler
-    
-    # To handle React Router / single page app refresh nicely, we can override do_GET:
-    class SPAHandler(Handler):
+    class SPAHandler(http.server.SimpleHTTPRequestHandler):
+        def end_headers(self):
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+            self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+            super().end_headers()
+
+        def do_OPTIONS(self):
+            self.send_response(200, "ok")
+            self.end_headers()
+
+        def do_POST(self):
+            if self.path == '/offer':
+                content_length = int(self.headers['Content-Length'])
+                post_data = self.rfile.read(content_length)
+                
+                try:
+                    import urllib.request
+                    # Proxy the request to local webrtcd (port 5001)
+                    req = urllib.request.Request("http://localhost:5001/stream", data=post_data, headers={'Content-Type': 'application/json'})
+                    with urllib.request.urlopen(req) as response:
+                        res_body = response.read()
+                        self.send_response(response.getcode())
+                        self.send_header('Content-Type', 'application/json')
+                        self.end_headers()
+                        self.wfile.write(res_body)
+                except Exception as e:
+                    self.send_response(500)
+                    self.end_headers()
+                    self.wfile.write(f'{{"error": "{str(e)}"}}'.encode('utf-8'))
+            else:
+                self.send_response(404)
+                self.end_headers()
+
         def do_GET(self):
             # If the requested path is not a file, return index.html
             path = self.translate_path(self.path)

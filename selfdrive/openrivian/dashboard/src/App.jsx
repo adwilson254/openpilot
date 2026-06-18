@@ -1,49 +1,9 @@
-import { useState, useEffect } from 'react'
-import Paho from 'paho-mqtt'
-import './App.css'
-import settingsUISchema from './assets/settings_ui.json'
-import paramsMetadata from './assets/params_metadata.json'
-
-function CelShadedTelemetry({ telemetry }) {
-  return (
-    <div className="cel-shaded" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem', alignContent: 'start' }}>
-      <div className="cel-card" style={{ gridColumn: '1 / -1' }}>
-        <h2>Live Telemetry</h2>
-      </div>
-
-      <div className="cel-card">
-        <span className="cel-label">Speed</span>
-        <div>
-          <span className="cel-value">{telemetry.speed}</span>
-          <span className="cel-unit"> mph</span>
-        </div>
-      </div>
-
-      <div className="cel-card">
-        <span className="cel-label">Battery SOC</span>
-        <div>
-          <span className="cel-value">{telemetry.battery}</span>
-          <span className="cel-unit">%</span>
-        </div>
-      </div>
-
-      <div className="cel-card">
-        <span className="cel-label">Gear</span>
-        <div>
-          <span className="cel-value" style={{color: '#00B4D8'}}>{telemetry.gear}</span>
-        </div>
-      </div>
-
-      <div className="cel-card">
-        <span className="cel-label">Device CPU Temp</span>
-        <div>
-          <span className="cel-value">{telemetry.cpuTemp}</span>
-          <span className="cel-unit">°C</span>
-        </div>
-      </div>
-    </div>
-  );
-}
+import { useState, useEffect } from 'react';
+import Paho from 'paho-mqtt';
+import './App.css';
+import settingsUISchema from './assets/settings_ui.json';
+import paramsMetadata from './assets/params_metadata.json';
+import Dashcam from './Dashcam';
 
 function renderItem(item, settings, onUpdateSetting) {
   const meta = paramsMetadata[item.key] || {};
@@ -51,24 +11,18 @@ function renderItem(item, settings, onUpdateSetting) {
 
   if (item.widget === 'toggle') {
     return (
-      <div key={item.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid #E0E0E0' }}>
+      <div key={item.key} className="setting-row">
         <div style={{ paddingRight: '1rem' }}>
-          <div style={{ fontWeight: 'bold' }}>{item.title}</div>
-          <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.25rem' }}>{item.description}</div>
+          <div className="setting-title">{item.title}</div>
+          <div className="setting-desc">{item.description}</div>
         </div>
         <button 
+          className="cel-button"
           onClick={() => onUpdateSetting(item.key, !value)}
           style={{
             background: value ? '#00D582' : '#333',
             color: '#FFF',
-            border: '2px solid #1A1A1A',
-            padding: '0.5rem 1rem',
-            borderRadius: '24px',
-            fontWeight: 'bold',
-            cursor: 'pointer',
             minWidth: '80px',
-            boxShadow: '2px 2px 0px #1A1A1A',
-            transition: 'all 0.1s'
           }}
         >
           {value ? "ON" : "OFF"}
@@ -78,191 +32,194 @@ function renderItem(item, settings, onUpdateSetting) {
   }
   else if (item.widget === 'option' || item.widget === 'multiple_button') {
     const options = item.options || meta.options || [];
-    if (options.length === 0) return null; // Skip if no options defined
+    if (options.length === 0) return null;
     return (
-      <div key={item.key} style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', padding: '0.5rem 0', borderBottom: '1px solid #E0E0E0' }}>
+      <div key={item.key} className="setting-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
         <div>
-          <div style={{ fontWeight: 'bold' }}>{item.title}</div>
-          <div style={{ fontSize: '0.85rem', color: '#666', marginTop: '0.25rem' }}>{item.description}</div>
+          <div className="setting-title">{item.title}</div>
+          <div className="setting-desc">{item.description}</div>
         </div>
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
           {options.map(opt => (
             <button
               key={opt.value}
+              className="cel-button"
               onClick={() => onUpdateSetting(item.key, opt.value)}
               style={{
                 background: value === opt.value ? '#FFD500' : '#FFF',
                 color: '#1A1A1A',
-                border: '2px solid #1A1A1A',
-                padding: '0.5rem 1rem',
-                borderRadius: '8px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                boxShadow: value === opt.value ? 'inset 2px 2px 0px rgba(0,0,0,0.1)' : '2px 2px 0px #1A1A1A'
               }}
             >
-              {opt.label}
+              {opt.label || opt.value}
             </button>
           ))}
         </div>
       </div>
-    )
+    );
   }
   return null;
 }
 
-function DynamicSettingsPanel({ panelId, settings, onUpdateSetting }) {
-  const panel = settingsUISchema.panels.find(p => p.id === panelId);
-  if (!panel) return null;
+function SettingsView({ activeCategory, setActiveCategory, settings, onUpdateSetting }) {
+  const categories = Object.keys(settingsUISchema).filter(k => k !== "Device");
+  
+  const currentCategoryData = settingsUISchema[activeCategory];
+  if (!currentCategoryData) return <div>Select a category</div>;
 
   return (
-    <div className="cel-shaded" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', alignContent: 'start', paddingBottom: '4rem' }}>
-      <div className="cel-card" style={{ width: '100%', boxSizing: 'border-box' }}>
-        <h2 style={{ margin: 0 }}>{panel.label}</h2>
-        {panel.description && <p style={{ color: '#666', marginTop: '0.5rem', marginBottom: 0 }}>{panel.description}</p>}
+    <div className="app-layout">
+      {/* Sidebar Navigation */}
+      <div className="app-sidebar">
+        {categories.map(cat => (
+          <div 
+            key={cat}
+            className={`nav-item ${activeCategory === cat ? 'active' : ''}`}
+            onClick={() => setActiveCategory(cat)}
+          >
+            {settingsUISchema[cat].icon && <span style={{fontSize: '1.2rem'}}>{settingsUISchema[cat].icon}</span>}
+            {settingsUISchema[cat].title || cat}
+          </div>
+        ))}
       </div>
 
-      {panel.sections.map(section => (
-        <div key={section.id} className="cel-card" style={{ width: '100%', alignItems: 'stretch', boxSizing: 'border-box' }}>
-          {section.title && <h3 style={{ borderBottom: '2px solid #1A1A1A', paddingBottom: '0.5rem', margin: '0 0 1rem 0' }}>{section.title}</h3>}
-          {section.description && <p style={{ color: '#666', marginBottom: '1rem', marginTop: 0 }}>{section.description}</p>}
+      {/* Main Settings Content */}
+      <div className="app-main">
+        <div className="app-content">
+          <div className="cel-card" style={{ width: '100%', marginBottom: '2rem' }}>
+            <h1 style={{ margin: 0, fontWeight: 900 }}>{currentCategoryData.title || activeCategory}</h1>
+          </div>
           
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            {section.items.map(item => renderItem(item, settings, onUpdateSetting))}
-            
-            {/* Render Sub Panels Inline */}
-            {section.sub_panels?.map(sub => (
-              <div key={sub.id} style={{ marginTop: '1.5rem', padding: '1.5rem', background: '#F4F3ED', borderRadius: '12px', border: '2px solid #1A1A1A' }}>
-                <h4 style={{ margin: '0 0 1rem 0' }}>{sub.label}</h4>
-                <div style={{ display: 'flex', flexDirection: 'column' }}>
-                  {sub.items.map(item => renderItem(item, settings, onUpdateSetting))}
-                </div>
-              </div>
-            ))}
+          <div className="cel-card" style={{ width: '100%', padding: '2rem' }}>
+            {currentCategoryData.items.map(item => {
+              if (item.key) return renderItem(item, settings, onUpdateSetting);
+              return null;
+            })}
           </div>
         </div>
-      ))}
+      </div>
     </div>
   );
 }
 
 function App() {
-  const [view, setView] = useState('telemetry');
-  const [telemetry, setTelemetry] = useState({
-    speed: 0.0,
-    battery: 0,
-    gear: 'P',
-    cpuTemp: 0.0,
-  });
-  
+  const [telemetry, setTelemetry] = useState({ speed: 0, battery: 0, gear: 'P', cpuTemp: 0 });
   const [settings, setSettings] = useState({});
-  const [client, setClient] = useState(null);
+  const [mqttClient, setMqttClient] = useState(null);
+  
+  // Tab Routing: "dashcam", "settings", "history", "controls"
+  const [activeTab, setActiveTab] = useState("dashcam");
+  const [activeCategory, setActiveCategory] = useState("Steering");
 
   useEffect(() => {
-    const host = window.location.hostname === 'localhost' ? '127.0.0.1' : window.location.hostname;
-    const mqtt = new Paho.Client(host, 9001, "web_dashboard_" + parseInt(Math.random() * 100, 10));
+    const host = window.location.hostname === 'localhost' ? '192.168.0.233' : window.location.hostname;
     
-    mqtt.onConnectionLost = (res) => {
-      console.log("MQTT Connection Lost:", res.errorMessage);
-      setTimeout(() => mqtt.connect({ onSuccess }), 3000);
-    };
+    const client = new Paho.Client(host, Number(9001), "clientId-" + Math.random().toString(16).substr(2, 8));
 
-    mqtt.onMessageArrived = (msg) => {
-      const topic = msg.destinationName;
-      let payload;
-      try { payload = JSON.parse(msg.payloadString); } catch(e) { return; }
-
-      if (topic === 'openrivian/vehicle/speed') {
-        setTelemetry(prev => ({ ...prev, speed: (payload.value * 2.23694).toFixed(1) }));
-      } else if (topic === 'openrivian/vehicle/battery') {
-        setTelemetry(prev => ({ ...prev, battery: payload.value }));
-      } else if (topic === 'openrivian/vehicle/gear') {
-        setTelemetry(prev => ({ ...prev, gear: payload.value }));
-      } else if (topic === 'openrivian/device/cpu_temp') {
-        setTelemetry(prev => ({ ...prev, cpuTemp: payload.value.toFixed(1) }));
-      }
-      else if (topic.startsWith('openrivian/settings/status/')) {
-        const param = topic.split('/').pop();
-        setSettings(prev => ({ ...prev, [param]: payload.value }));
+    client.onConnectionLost = (responseObject) => {
+      if (responseObject.errorCode !== 0) {
+        console.error("MQTT Connection Lost:", responseObject.errorMessage);
       }
     };
 
-    const onSuccess = () => {
-      console.log("MQTT Connected via WebSockets");
-      mqtt.subscribe("openrivian/vehicle/#");
-      mqtt.subscribe("openrivian/device/#");
-      mqtt.subscribe("openrivian/settings/status/#");
-      setClient(mqtt);
+    client.onMessageArrived = (message) => {
+      try {
+        const topic = message.destinationName;
+        const payload = JSON.parse(message.payloadString);
+        
+        if (topic === "openrivian/telemetry") {
+          setTelemetry(prev => ({ ...prev, ...payload }));
+        } else if (topic.startsWith("openrivian/settings/status/")) {
+          const paramKey = topic.split('/').pop();
+          setSettings(prev => ({ ...prev, [paramKey]: payload.value }));
+        }
+      } catch (e) {
+        console.error("Error parsing MQTT message:", e);
+      }
     };
 
-    mqtt.connect({ onSuccess });
-    return () => mqtt.disconnect();
+    client.connect({
+      onSuccess: () => {
+        console.log("Connected to MQTT Broker");
+        client.subscribe("openrivian/telemetry");
+        client.subscribe("openrivian/settings/status/#");
+      },
+      onFailure: (e) => console.error("MQTT Connection Failed", e)
+    });
+
+    setMqttClient(client);
+
+    return () => {
+      if (client.isConnected()) {
+        client.disconnect();
+      }
+    };
   }, []);
 
-  const handleUpdateSetting = (param, value) => {
-    if (client && client.isConnected()) {
-      const msg = new Paho.Message(JSON.stringify({ value }));
-      msg.destinationName = `openrivian/settings/set/${param}`;
-      client.send(msg);
-      // Optimistically update local UI state (it will revert after 5s if backend is read-only)
-      setSettings(prev => ({ ...prev, [param]: value }));
+  const handleUpdateSetting = (key, value) => {
+    if (mqttClient && mqttClient.isConnected()) {
+      const message = new Paho.Message(JSON.stringify({ value }));
+      message.destinationName = `openrivian/settings/set/${key}`;
+      mqttClient.send(message);
+      
+      setSettings(prev => ({ ...prev, [key]: value }));
     }
   };
 
   return (
-    <div className="app-container" style={{ flexDirection: 'row' }}>
-      {/* Sidebar Navigation */}
-      <div style={{ width: '250px', background: '#1A1A1A', color: '#FFF', display: 'flex', flexDirection: 'column', borderRight: '4px solid #000' }}>
-        <div style={{ padding: '1.5rem', background: '#FFD500', color: '#000', borderBottom: '4px solid #000' }}>
-          <h2 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 900, textTransform: 'uppercase' }}>OpenRivian</h2>
-        </div>
-        
-        <div style={{ display: 'flex', flexDirection: 'column', padding: '1rem', gap: '0.5rem', overflowY: 'auto' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
+      
+      {/* Top Bar Navigation */}
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        gap: '1rem', 
+        padding: '1rem', 
+        background: '#121212', 
+        borderBottom: '3px solid #1A1A1A',
+        zIndex: 100 
+      }}>
+        {['dashcam', 'settings', 'history', 'controls'].map(tab => (
           <button 
-            className={`nav-btn ${view === 'telemetry' ? 'active' : ''}`}
-            onClick={() => setView('telemetry')}
-            style={{ 
-              background: view === 'telemetry' ? '#00D582' : 'transparent',
-              color: view === 'telemetry' ? '#000' : '#FFF',
-              border: view === 'telemetry' ? '2px solid #000' : '2px solid transparent',
-              padding: '0.8rem 1rem', borderRadius: '8px', textAlign: 'left', fontWeight: 'bold', cursor: 'pointer' 
+            key={tab}
+            className="cel-button"
+            onClick={() => setActiveTab(tab)}
+            style={{
+              background: activeTab === tab ? '#FFD500' : '#333',
+              color: activeTab === tab ? '#000' : '#FFF',
+              textTransform: 'capitalize'
             }}
           >
-            Telemetry
+            {tab}
           </button>
-          
-          <div style={{ margin: '1rem 0 0.5rem 0', color: '#888', fontSize: '0.8rem', textTransform: 'uppercase', fontWeight: 'bold', paddingLeft: '1rem' }}>
-            Settings
-          </div>
-
-          {settingsUISchema.panels.map(panel => (
-            <button 
-              key={panel.id}
-              className={`nav-btn ${view === panel.id ? 'active' : ''}`}
-              onClick={() => setView(panel.id)}
-              style={{ 
-                background: view === panel.id ? '#FFD500' : 'transparent',
-                color: view === panel.id ? '#000' : '#FFF',
-                border: view === panel.id ? '2px solid #000' : '2px solid transparent',
-                padding: '0.8rem 1rem', borderRadius: '8px', textAlign: 'left', fontWeight: 'bold', cursor: 'pointer' 
-              }}
-            >
-              {panel.label}
-            </button>
-          ))}
-        </div>
+        ))}
       </div>
 
-      {/* Main Content Area */}
-      <div style={{ flex: 1, overflowY: 'auto', background: '#F4F3ED' }}>
-        {view === 'telemetry' ? (
-          <CelShadedTelemetry telemetry={telemetry} />
-        ) : (
-          <DynamicSettingsPanel panelId={view} settings={settings} onUpdateSetting={handleUpdateSetting} />
+      {/* Main Routing Area */}
+      <div style={{ flex: 1, overflow: 'hidden' }}>
+        {activeTab === 'dashcam' && <Dashcam telemetry={telemetry} />}
+        {activeTab === 'settings' && (
+          <SettingsView 
+            activeCategory={activeCategory} 
+            setActiveCategory={setActiveCategory} 
+            settings={settings} 
+            onUpdateSetting={handleUpdateSetting} 
+          />
+        )}
+        {activeTab === 'history' && (
+          <div className="app-main" style={{ justifyContent: 'center', alignItems: 'center' }}>
+            <h1 style={{ color: '#1A1A1A' }}>Drive History Maps</h1>
+            <p>Coming soon...</p>
+          </div>
+        )}
+        {activeTab === 'controls' && (
+          <div className="app-main" style={{ justifyContent: 'center', alignItems: 'center' }}>
+            <h1 style={{ color: '#1A1A1A' }}>OpenRivian Controls</h1>
+            <p>Coming soon...</p>
+          </div>
         )}
       </div>
     </div>
-  )
+  );
 }
 
-export default App
+export default App;
