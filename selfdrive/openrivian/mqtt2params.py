@@ -64,8 +64,13 @@ last_published_values = {}
 
 def publish_all_params(client):
     for param in PARAMS_WHITELIST:
-        # Get raw bytes
-        val_bytes = params.get(param)
+        # Get raw bytes safely
+        try:
+            val_bytes = params.get(param)
+        except Exception as e:
+            # params.get raises UnknownKeyName if the param is not defined in params_keys.h
+            logging.debug(f"Skipping unknown param: {param}")
+            continue
         val = None
         
         if val_bytes is not None:
