@@ -63,7 +63,14 @@ class RivianAPI:
             raise Exception(f"HTTP Error {resp.status_code}: {resp.text}") from e
         data = resp.json()
         
-        result = data.get("data", {}).get("createCsrfToken", {})
+        if "errors" in data:
+            raise Exception(f"GraphQL Error: {data['errors']}")
+            
+        result = data.get("data")
+        if not result:
+            return False
+            
+        result = result.get("createCsrfToken", {})
         if "csrfToken" in result:
             csrf = result["csrfToken"]
             app_session = result["appSessionToken"]
@@ -106,7 +113,14 @@ class RivianAPI:
             raise Exception(f"HTTP Error {resp.status_code}: {resp.text}") from e
         data = resp.json()
 
-        result = data.get("data", {}).get("login", {})
+        if "errors" in data:
+            raise Exception(f"GraphQL Error: {data['errors']}")
+            
+        result = data.get("data")
+        if not result:
+            raise Exception("GraphQL response contained no data.")
+            
+        result = result.get("login", {})
         
         if result.get("__typename") == "MobileLoginResponse":
             self._save_tokens(result["accessToken"], result["refreshToken"])
@@ -146,7 +160,14 @@ class RivianAPI:
             raise Exception(f"HTTP Error {resp.status_code}: {resp.text}") from e
         data = resp.json()
 
-        result = data.get("data", {}).get("loginWithOtp", {})
+        if "errors" in data:
+            raise Exception(f"GraphQL Error: {data['errors']}")
+            
+        result = data.get("data")
+        if not result:
+            raise Exception("GraphQL response contained no data.")
+            
+        result = result.get("loginWithOtp", {})
         
         if result.get("__typename") == "MobileLoginResponse":
             self._save_tokens(result["accessToken"], result["refreshToken"])
@@ -176,4 +197,7 @@ class RivianAPI:
             resp.raise_for_status()
         except requests.exceptions.HTTPError as e:
             raise Exception(f"HTTP Error {resp.status_code}: {resp.text}") from e
-        return resp.json()
+        data = resp.json()
+        if "errors" in data:
+            raise Exception(f"GraphQL Error: {data['errors']}")
+        return data
