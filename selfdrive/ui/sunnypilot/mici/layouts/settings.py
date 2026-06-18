@@ -56,8 +56,8 @@ class SettingsLayoutSP(OP.SettingsLayout):
 
     items = self._scroller._items.copy()
 
-    items.insert(1, sunnylink_btn)
-    items.insert(2, models_btn)
+    items.insert(2, sunnylink_btn)
+    items.insert(3, models_btn)
 
     # front slots (only one ever visible at a time): exit-always-offroad, then enable-onroad
     items.insert(0, self._enable_offroad_btn_onroad)
