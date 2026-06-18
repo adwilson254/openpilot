@@ -39,7 +39,7 @@ jobs:
           git merge clean -m "Merge clean into dev"
           
           # Run the Python injection script
-          python selfdrive/ui/openrivian/scripts/inject.py
+          python3 selfdrive/ui/openrivian/scripts/inject.py
           
           # Add any injected changes and commit
           git add system/ui/spinner.py
