@@ -21,15 +21,17 @@ class RivianAPI:
     def _load_tokens(self):
         acc = self.params.get("RivianAccessToken")
         if acc:
+            acc_str = acc.decode("utf-8") if isinstance(acc, bytes) else str(acc)
             try:
-                tokens = json.loads(acc.decode("utf-8"))
+                tokens = json.loads(acc_str)
                 self.access_token = tokens.get("accessToken")
                 self.refresh_token = tokens.get("refreshToken")
                 self.user_session_token = tokens.get("userSessionToken")
             except json.JSONDecodeError:
                 # Fallback for old tokens
-                self.access_token = acc.decode("utf-8")
-                self.refresh_token = self.params.get("RivianRefreshToken").decode("utf-8") if self.params.get("RivianRefreshToken") else None
+                self.access_token = acc_str
+                ref = self.params.get("RivianRefreshToken")
+                self.refresh_token = (ref.decode("utf-8") if isinstance(ref, bytes) else str(ref)) if ref else None
                 self.user_session_token = None
         else:
             self.access_token = None
