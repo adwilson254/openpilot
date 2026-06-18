@@ -265,6 +265,8 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
 
     // Rivian
     {"RivianResumeEnabled", {PERSISTENT | BACKUP, BOOL, "0"}},
+    {"RivianAccessToken", {PERSISTENT | DONT_LOG | BACKUP, STRING}},
+    {"RivianRefreshToken", {PERSISTENT | DONT_LOG | BACKUP, STRING}},
 
     // Smart Cruise Control
     {"MapTargetVelocities", {CLEAR_ON_ONROAD_TRANSITION, STRING}},
