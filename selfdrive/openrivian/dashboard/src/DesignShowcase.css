@@ -1,0 +1,430 @@
+.showcase-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  background: #111;
+  color: #fff;
+  font-family: 'Inter', sans-serif;
+  overflow: hidden;
+}
+
+.showcase-controls {
+  padding: 1rem;
+  background: #222;
+  border-bottom: 1px solid #333;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 100;
+}
+
+.showcase-controls h3 {
+  margin: 0;
+  font-weight: 500;
+}
+
+.button-group {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.button-group button {
+  background: #333;
+  border: none;
+  color: #aaa;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.button-group button.active {
+  background: #4A90E2;
+  color: white;
+}
+
+.showcase-frame {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+}
+
+.mockup-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  background: #1a1e21; /* Muted dark grey for all combos */
+  padding: 2rem;
+  box-sizing: border-box;
+}
+
+/* Base Camp Tile */
+.camp-tile {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.camp-tile.highlight {
+  background: rgba(250, 204, 21, 0.1);
+  border-color: rgba(250, 204, 21, 0.5);
+}
+
+.camp-tile .label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 1px;
+  opacity: 0.6;
+  margin-bottom: 0.5rem;
+}
+
+.camp-tile .value {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.camp-tile .value.yellow { color: #facc15; }
+.camp-tile .value.green { color: #4ade80; }
+.camp-tile .value.giant { font-size: 4.5rem; }
+
+/* Mockup 1: Center Hologram */
+.combo-center-hologram {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.combo-center-hologram .camp-grid-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 250px;
+}
+
+.combo-center-hologram .center-hologram-stage {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  height: 100%;
+}
+
+.holo-callout {
+  position: absolute;
+  font-size: 1.2rem;
+  font-weight: bold;
+  color: #88c0d0;
+  background: rgba(0,0,0,0.4);
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  border-left: 3px solid #88c0d0;
+}
+
+.holo-callout.top-left { top: 30%; left: 10%; }
+.holo-callout.top-right { top: 30%; right: 10%; border-left: none; border-right: 3px solid #88c0d0; }
+.holo-callout.bottom-left { bottom: 30%; left: 10%; }
+.holo-callout.bottom-right { bottom: 30%; right: 10%; border-left: none; border-right: 3px solid #88c0d0; }
+
+/* Mockup 2: Split Screen */
+.combo-split-screen {
+  gap: 3rem;
+}
+
+.split-left {
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
+
+.camp-grid-dense {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.camp-tile.large-tile {
+  grid-column: span 2;
+  padding: 2.5rem;
+}
+
+.split-right {
+  flex: 1;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 32px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.hologram-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+}
+
+.holo-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: #facc15;
+}
+
+.holo-data-bar {
+  display: flex;
+  gap: 3rem;
+  font-size: 1.5rem;
+  font-weight: bold;
+  background: rgba(255,255,255,0.05);
+  padding: 1rem 2rem;
+  border-radius: 30px;
+}
+
+/* Mockup 3: Hologram over Grid */
+.combo-holo-grid {
+  position: relative;
+  justify-content: center;
+  align-items: center;
+}
+
+.background-grid {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.02);
+  z-index: 1;
+}
+
+.faint-tile {
+  background: rgba(26, 30, 33, 0.9); /* Same as main bg but solid */
+  display: flex;
+  flex-direction: column;
+  padding: 2rem;
+  gap: 0.5rem;
+}
+
+.faint-tile .line {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+  width: 80%;
+}
+.faint-tile .line.short { width: 40%; }
+
+.foreground-hologram {
+  position: relative;
+  z-index: 2;
+  width: 600px;
+  height: 500px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.camp-tile.attached {
+  position: absolute;
+  background: rgba(20, 24, 28, 0.8);
+  border: 1px solid rgba(250, 204, 21, 0.3);
+  padding: 1rem;
+  transform: scale(0.9);
+}
+
+.fl-tile { top: 10%; left: -10%; }
+.fr-tile { top: 10%; right: -10%; }
+.rl-tile { bottom: 10%; left: -10%; }
+.rr-tile { bottom: 10%; right: -10%; }
+
+.bottom-bar-camp {
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+}
+
+.camp-tile.wide {
+  width: 400px;
+  text-align: center;
+  align-items: center;
+}
+
+/* Pseudo 3D Isometric Truck CSS Art */
+.isometric-truck-container {
+  width: 300px;
+  height: 200px;
+  position: relative;
+  transform-style: preserve-3d;
+  transform: rotateX(60deg) rotateZ(45deg); /* Isometric perspective */
+}
+
+.truck-body {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+
+.chassis {
+  position: absolute;
+  width: 200px;
+  height: 100px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid #88c0d0;
+  top: 50px;
+  left: 50px;
+}
+
+.cab {
+  position: absolute;
+  width: 80px;
+  height: 96px;
+  background: rgba(250, 204, 21, 0.2);
+  border: 2px solid #facc15;
+  top: 52px;
+  left: 170px;
+  transform: translateZ(40px);
+}
+
+.bed {
+  position: absolute;
+  width: 100px;
+  height: 96px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid #aaa;
+  top: 52px;
+  left: 52px;
+}
+
+.wheel {
+  position: absolute;
+  width: 40px;
+  height: 16px;
+  background: #333;
+  border: 2px solid #555;
+  border-radius: 4px;
+}
+
+.wheel.fl { top: 30px; left: 190px; }
+.wheel.fr { top: 154px; left: 190px; }
+.wheel.rl { top: 30px; left: 70px; }
+.wheel.rr { top: 154px; left: 70px; }
+
+/* Mockup 4: Ultimate Hybrid (2+3) */
+.combo-ultimate-hybrid {
+  position: relative;
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+}
+
+.combo-ultimate-hybrid .background-grid {
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+}
+
+.hybrid-content {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  padding: 3rem;
+  box-sizing: border-box;
+  gap: 4rem;
+}
+
+.hybrid-holo {
+  transform: scale(1.1);
+}
+
+/* Option 6: Studio Ghibli Organic Hybrid */
+.studio-ghibli {
+  color: #fff;
+  font-family: 'Outfit', 'Inter', sans-serif;
+}
+
+.vertical-dock {
+  box-shadow: 2px 0 10px rgba(0,0,0,0.2);
+}
+
+.top-bar-organic {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(10px);
+  padding: 1rem 2rem;
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.mode-badge {
+  background: rgba(188, 94, 76, 0.8);
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-weight: bold;
+  letter-spacing: 1px;
+}
+
+.ghibli-grid {
+  display: flex;
+  gap: 1rem;
+}
+
+.organic-panel {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2rem;
+  padding: 2rem;
+  border-radius: 30px;
+  width: 250px;
+}
+
+.ghibli-stat label {
+  font-size: 0.9rem;
+  opacity: 0.8;
+  font-weight: 600;
+  letter-spacing: 2px;
+}
+
+.ghibli-stat .value {
+  font-size: 3rem;
+  font-weight: 800;
+  margin-top: 0.5rem;
+}
+
+.center-illustration {
+  flex: 1;
+  border-radius: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.center-stats {
+  position: absolute;
+  bottom: 2rem;
+  display: flex;
+  gap: 2rem;
+  padding: 1rem 3rem;
+  border-radius: 40px;
+  font-size: 1.5rem;
+  font-weight: bold;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}

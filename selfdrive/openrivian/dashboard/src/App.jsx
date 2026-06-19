@@ -6,6 +6,7 @@ import paramsMetadata from './assets/params_metadata.json';
 import Telemetry from './Telemetry';
 import DriveHistory from './DriveHistory';
 import Controls from './Controls';
+import DesignShowcase from './DesignShowcase';
 
 function renderItem(item, settings, onUpdateSetting) {
   const meta = paramsMetadata[item.key] || {};
@@ -116,7 +117,7 @@ function App() {
   const [settings, setSettings] = useState({});
   const [mqttClient, setMqttClient] = useState(null);
   
-  // Tab Routing: "telemetry", "settings", "history", "controls"
+  // Tab Routing: "telemetry", "settings", "history", "controls", "showcase"
   const [activeTab, setActiveTab] = useState("telemetry");
   const [activePanelId, setActivePanelId] = useState("steering");
 
@@ -153,6 +154,21 @@ function App() {
         }
         else if (topic === "openrivian/vehicle/powertrain/soc") {
           setTelemetry(prev => ({ ...prev, battery: Math.round(payload.value) }));
+        }
+        else if (topic === "openrivian/adas/active") {
+          setTelemetry(prev => ({ ...prev, adasActive: payload.value }));
+        }
+        else if (topic === "openrivian/vehicle/powertrain/wheel_speed_fl") {
+          setTelemetry(prev => ({ ...prev, flSpeed: Math.round(payload.value) }));
+        }
+        else if (topic === "openrivian/vehicle/powertrain/wheel_speed_fr") {
+          setTelemetry(prev => ({ ...prev, frSpeed: Math.round(payload.value) }));
+        }
+        else if (topic === "openrivian/vehicle/powertrain/wheel_speed_rl") {
+          setTelemetry(prev => ({ ...prev, rlSpeed: Math.round(payload.value) }));
+        }
+        else if (topic === "openrivian/vehicle/powertrain/wheel_speed_rr") {
+          setTelemetry(prev => ({ ...prev, rrSpeed: Math.round(payload.value) }));
         }
         else if (topic === "openrivian/device/hardware/cpu_temp_c") {
           setTelemetry(prev => ({ ...prev, cpuTemp: Math.round(payload.value) }));
@@ -207,7 +223,7 @@ function App() {
         borderBottom: '3px solid #1A1A1A',
         zIndex: 100 
       }}>
-        {['dashcam', 'settings', 'history', 'controls'].map(tab => (
+        {['telemetry', 'settings', 'history', 'controls', 'showcase'].map(tab => (
           <button 
             key={tab}
             className="cel-button"
