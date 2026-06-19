@@ -32,11 +32,11 @@ jobs:
           git checkout clean
           git merge upstream/ap-dev --ff-only
           
-      - name: Inject into dev branch
+      - name: Inject into dev-test branch
         run: |
-          # Checkout dev
-          git checkout dev || git checkout -b dev
-          git merge clean -m "Merge clean into dev"
+          # Checkout dev-test
+          git checkout dev-test || git checkout -b dev-test
+          git merge clean -m "Merge clean into dev-test"
           
           # Run the Python injection script
           python3 selfdrive/ui/openrivian/scripts/inject.py
@@ -48,4 +48,4 @@ jobs:
       - name: Push branches
         run: |
           git push origin clean
-          git push origin dev
+          git push origin dev-test

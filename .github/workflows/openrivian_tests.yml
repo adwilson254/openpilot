@@ -1,0 +1,42 @@
+name: OpenRivian Tests & CI/CD
+on:
+  push:
+    branches:
+      - dev-test
+
+jobs:
+  test_and_merge:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Git User
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Run OpenRivian Daemon Tests
+        run: |
+          PYTHONPATH=. uv run python3 selfdrive/openrivian/tests/test_daemons.py
+
+      - name: Fast-Forward Dev Branch
+        if: success()
+        run: |
+          # Fast-forward origin/dev to this commit
+          git push origin HEAD:dev
