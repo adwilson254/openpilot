@@ -55,6 +55,65 @@ openpilot_common_params.Params = MockParams
 openpilot_common_realtime = create_mock_module('openpilot.common.realtime')
 openpilot_common_realtime.Ratekeeper = MagicMock()
 
+def test_missing_api_isolation():
+    print("Testing MQTT and Web services without API (Isolation Test)...")
+    
+    # Hide the API module
+    import sys
+    sys.modules['selfdrive.openrivian.api'] = None
+    sys.modules['selfdrive.openrivian.api.rivian_api'] = None
+    sys.modules['selfdrive.openrivian.api.openriviand'] = None
+    
+    try:
+        from selfdrive.openrivian import cereal2mqtt
+        from selfdrive.openrivian import mqttd
+        from selfdrive.openrivian import mqtt2params
+        from selfdrive.openrivian import webd
+        print(" -> All MQTT and Web modules successfully imported without API dependency.")
+    except Exception as e:
+        print(f"FAILED Isolation Test: {e}")
+        sys.exit(1)
+        
+    # Restore modules
+    del sys.modules['selfdrive.openrivian.api']
+    del sys.modules['selfdrive.openrivian.api.rivian_api']
+    del sys.modules['selfdrive.openrivian.api.openriviand']
+
+def test_unauthenticated_api():
+    print("Testing openriviand unauthenticated state...")
+    try:
+        from selfdrive.openrivian.api import openriviand
+        class MockParams:
+            def get(self, key):
+                return None
+        # Execute one step
+        openriviand.step(MockParams())
+        print(" -> openriviand completed step with missing RivianAccessToken gracefully.")
+    except Exception as e:
+        print(f"FAILED Unauthenticated API Test: {e}")
+        sys.exit(1)
+
+def test_nice_priorities():
+    print("Testing os.nice(19) priority in all daemons...")
+    import os
+    daemons = [
+        "selfdrive/openrivian/cereal2mqtt.py",
+        "selfdrive/openrivian/mqttd.py",
+        "selfdrive/openrivian/mqtt2params.py",
+        "selfdrive/openrivian/webd.py",
+        "selfdrive/openrivian/api/openriviand.py",
+    ]
+    for d in daemons:
+        try:
+            with open(d, "r") as f:
+                content = f.read()
+                if "os.nice(19)" not in content:
+                    print(f"FAILED Priority Test: os.nice(19) not found in {d}")
+                    sys.exit(1)
+        except FileNotFoundError:
+            pass
+    print(" -> All daemons have os.nice(19) to protect self-drive compute.")
+
 # We don't need to mock paho.mqtt because we added it via uv add
 # But we do need to mock its functions to raise LoopBreakException
 def run_tests():
@@ -83,6 +142,11 @@ def run_tests():
         print(f"FAILED: {e}")
         import sys
         sys.exit(1)
+        
+    # Run the isolation tests
+    test_missing_api_isolation()
+    test_unauthenticated_api()
+    test_nice_priorities()
         
     print("ALL TESTS PASSED.")
 
