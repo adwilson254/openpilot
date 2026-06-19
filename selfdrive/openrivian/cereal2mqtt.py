@@ -101,7 +101,7 @@ def main():
         # --- PANDA STATE ---
         if sm.updated['pandaStates'] and len(sm['pandaStates']) > 0:
             ps = sm['pandaStates'][0]
-            publish_safely(client, "openrivian/vehicle/powertrain/ignition", ps.ignitionLine)
+            publish_safely(client, "openrivian/vehicle/powertrain/ignition", ps.ignitionLine or ps.ignitionCan)
             publish_safely(client, "openrivian/device/hardware/voltage", ps.voltage / 1000.0)
 
         # --- LOCATION ---
