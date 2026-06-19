@@ -53,7 +53,7 @@ def main():
                     
                     # Proxy the request to local webrtcd (port 5001)
                     req = urllib.request.Request("http://localhost:5001/stream", data=webrtcd_post_data, headers={'Content-Type': 'application/json'})
-                    with urllib.request.urlopen(req) as response:
+                    with urllib.request.urlopen(req, timeout=5) as response:
                         res_body = response.read()
                         self.send_response(response.getcode())
                         self.send_header('Content-Type', 'application/json')
@@ -74,7 +74,10 @@ def main():
                 self.path = '/index.html'
             return super().do_GET()
     
-    with socketserver.TCPServer(("", PORT), SPAHandler) as httpd:
+    class ThreadingHTTPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
+        daemon_threads = True
+
+    with ThreadingHTTPServer(("", PORT), SPAHandler) as httpd:
         logging.info(f"[+] OpenRivian Web Dashboard serving at port {PORT}")
         httpd.serve_forever()
 
