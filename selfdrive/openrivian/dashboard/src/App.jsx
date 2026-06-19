@@ -119,7 +119,10 @@ function App() {
   const [activePanelId, setActivePanelId] = useState("steering");
 
   useEffect(() => {
-    const host = window.location.hostname === 'localhost' ? '192.168.0.233' : window.location.hostname;
+    // Check URL params first (e.g. ?host=192.168.2.232), then fallback to truck IP if localhost
+    const urlParams = new URLSearchParams(window.location.search);
+    const hostParam = urlParams.get('host');
+    const host = hostParam ? hostParam : (window.location.hostname === 'localhost' ? '192.168.2.232' : window.location.hostname);
     
     const client = new Paho.Client(host, Number(9001), "clientId-" + Math.random().toString(16).substr(2, 8));
 
