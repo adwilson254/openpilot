@@ -134,11 +134,26 @@ function App() {
         const topic = message.destinationName;
         const payload = JSON.parse(message.payloadString);
         
-        if (topic === "openrivian/telemetry") {
-          setTelemetry(prev => ({ ...prev, ...payload }));
-        } else if (topic.startsWith("openrivian/settings/status/")) {
+        // Settings Mapping
+        if (topic.startsWith("openrivian/settings/status/")) {
           const paramKey = topic.split('/').pop();
           setSettings(prev => ({ ...prev, [paramKey]: payload.value }));
+        }
+        // Telemetry Mapping
+        else if (topic === "openrivian/vehicle/powertrain/speed_mph") {
+          setTelemetry(prev => ({ ...prev, speed: Math.round(payload.value) }));
+        }
+        else if (topic === "openrivian/vehicle/powertrain/gear") {
+          setTelemetry(prev => ({ ...prev, gear: payload.value }));
+        }
+        else if (topic === "openrivian/vehicle/powertrain/soc") {
+          setTelemetry(prev => ({ ...prev, battery: Math.round(payload.value) }));
+        }
+        else if (topic === "openrivian/device/hardware/cpu_temp_c") {
+          setTelemetry(prev => ({ ...prev, cpuTemp: Math.round(payload.value) }));
+        }
+        else if (topic === "openrivian/device/hardware/free_space_percent") {
+          setTelemetry(prev => ({ ...prev, freeSpace: payload.value.toFixed(1) }));
         }
       } catch (e) {
         console.error("Error parsing MQTT message:", e);
@@ -148,7 +163,8 @@ function App() {
     client.connect({
       onSuccess: () => {
         console.log("Connected to MQTT Broker");
-        client.subscribe("openrivian/telemetry");
+        client.subscribe("openrivian/vehicle/#");
+        client.subscribe("openrivian/device/#");
         client.subscribe("openrivian/settings/status/#");
       },
       onFailure: (e) => console.error("MQTT Connection Failed", e)

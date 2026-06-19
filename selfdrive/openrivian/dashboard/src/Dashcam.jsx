@@ -121,11 +121,11 @@ export default function Dashcam({ telemetry }) {
         </div>
         <div className="cel-card">
           <span className="cel-label">Storage Free</span>
-          <div><span className="cel-value">12.4</span><span className="cel-unit"> GB</span></div>
+          <div><span className="cel-value">{telemetry.freeSpace || '--'}</span><span className="cel-unit">%</span></div>
         </div>
         <div className="cel-card">
-          <span className="cel-label">Connection</span>
-          <div><span className="cel-value" style={{color: '#00B4D8'}}>WIFI</span></div>
+          <span className="cel-label">Gear</span>
+          <div><span className="cel-value" style={{color: '#00B4D8'}}>{telemetry.gear || 'P'}</span></div>
         </div>
       </div>
     </div>
