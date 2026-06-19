@@ -34,6 +34,13 @@ def publish_safely(client, topic, payload):
         logging.debug(f"Failed to publish {topic}: {e}")
 
 def main():
+    # Deprioritize this process to the absolute lowest CPU scheduler priority (19)
+    # This ensures that our additive scripts CANNOT starve radard or other critical openpilot processes.
+    try:
+        os.nice(19)
+    except Exception as e:
+        logging.warning(f"Failed to set nice value: {e}")
+
     logging.basicConfig(level=logging.INFO)
     logging.info("[*] Starting Cereal to MQTT Bridge...")
 

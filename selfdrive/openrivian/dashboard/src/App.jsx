@@ -3,7 +3,9 @@ import Paho from 'paho-mqtt';
 import './App.css';
 import settingsUISchema from './assets/settings_ui.json';
 import paramsMetadata from './assets/params_metadata.json';
-import Dashcam from './Dashcam';
+import Telemetry from './Telemetry';
+import DriveHistory from './DriveHistory';
+import Controls from './Controls';
 
 function renderItem(item, settings, onUpdateSetting) {
   const meta = paramsMetadata[item.key] || {};
@@ -114,15 +116,15 @@ function App() {
   const [settings, setSettings] = useState({});
   const [mqttClient, setMqttClient] = useState(null);
   
-  // Tab Routing: "dashcam", "settings", "history", "controls"
-  const [activeTab, setActiveTab] = useState("dashcam");
+  // Tab Routing: "telemetry", "settings", "history", "controls"
+  const [activeTab, setActiveTab] = useState("telemetry");
   const [activePanelId, setActivePanelId] = useState("steering");
 
   useEffect(() => {
     // Check URL params first (e.g. ?host=192.168.2.232), then fallback to truck IP if localhost
     const urlParams = new URLSearchParams(window.location.search);
     const hostParam = urlParams.get('host');
-    const host = hostParam ? hostParam : (window.location.hostname === 'localhost' ? '192.168.2.232' : window.location.hostname);
+    const host = hostParam ? hostParam : (window.location.hostname === 'localhost' ? '192.168.0.233' : window.location.hostname);
     
     const client = new Paho.Client(host, Number(9001), "clientId-" + Math.random().toString(16).substr(2, 8));
 
@@ -187,9 +189,9 @@ function App() {
       const message = new Paho.Message(JSON.stringify({ value }));
       message.destinationName = `openrivian/settings/set/${key}`;
       mqttClient.send(message);
-      
-      setSettings(prev => ({ ...prev, [key]: value }));
     }
+    
+    setSettings(prev => ({ ...prev, [key]: value }));
   };
 
   return (
@@ -223,7 +225,7 @@ function App() {
 
       {/* Main Routing Area */}
       <div style={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 'dashcam' && <Dashcam telemetry={telemetry} />}
+        {activeTab === 'telemetry' && <Telemetry telemetry={telemetry} />}
         {activeTab === 'settings' && (
           <SettingsView 
             activePanelId={activePanelId} 
@@ -232,18 +234,8 @@ function App() {
             onUpdateSetting={handleUpdateSetting} 
           />
         )}
-        {activeTab === 'history' && (
-          <div className="app-main" style={{ justifyContent: 'center', alignItems: 'center' }}>
-            <h1 style={{ color: '#1A1A1A' }}>Drive History Maps</h1>
-            <p>Coming soon...</p>
-          </div>
-        )}
-        {activeTab === 'controls' && (
-          <div className="app-main" style={{ justifyContent: 'center', alignItems: 'center' }}>
-            <h1 style={{ color: '#1A1A1A' }}>OpenRivian Controls</h1>
-            <p>Coming soon...</p>
-          </div>
-        )}
+        {activeTab === 'history' && <DriveHistory />}
+        {activeTab === 'controls' && <Controls mqttClient={mqttClient} />}
       </div>
     </div>
   );

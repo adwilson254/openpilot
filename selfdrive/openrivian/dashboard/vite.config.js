@@ -7,7 +7,11 @@ export default defineConfig({
   server: {
     proxy: {
       '/offer': {
-        target: 'http://192.168.2.232:8081',
+        target: 'http://192.168.0.233:8081',
+        changeOrigin: true
+      },
+      '/routes': {
+        target: 'http://192.168.0.233:8081',
         changeOrigin: true
       }
     }

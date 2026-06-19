@@ -50,6 +50,12 @@ async def run_broker():
         print("[*] MQTT Broker shutdown.")
 
 def main():
+    import os
+    try:
+        os.nice(19)
+    except Exception as e:
+        print(f"Failed to set nice value: {e}")
+
     try:
         asyncio.run(run_broker())
     except KeyboardInterrupt:
