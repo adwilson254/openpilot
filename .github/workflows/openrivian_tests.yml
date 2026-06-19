@@ -2,7 +2,11 @@ name: OpenRivian Tests & CI/CD
 on:
   push:
     branches:
+      - '**'
+  pull_request:
+    branches:
       - dev-test
+      - dev
 
 jobs:
   test_and_merge:
@@ -36,7 +40,7 @@ jobs:
           PYTHONPATH=. uv run python3 selfdrive/openrivian/tests/test_daemons.py
 
       - name: Fast-Forward Dev Branch
-        if: success()
+        if: success() && github.ref == 'refs/heads/dev-test'
         run: |
           # Fast-forward origin/dev to this commit
           git push origin HEAD:dev
