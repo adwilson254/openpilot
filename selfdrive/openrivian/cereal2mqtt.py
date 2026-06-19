@@ -61,7 +61,7 @@ def main():
 
     # Set up SubMaster
     # Subscribing to high-value sockets
-    sm = messaging.SubMaster(['carState', 'deviceState', 'liveLocationKalman', 'pandaStates'])
+    sm = messaging.SubMaster(['carState', 'deviceState', 'liveLocationKalman', 'pandaStates', 'controlsState', 'radarState', 'managerState'])
 
     logging.info("[*] Subscribed to Cereal sockets. Entering publish loop...")
     while True:
@@ -78,6 +78,24 @@ def main():
             publish_safely(client, "openrivian/vehicle/controls/brake_pressed", cs.brakePressed)
             publish_safely(client, "openrivian/vehicle/controls/steering_angle_deg", cs.steeringAngleDeg)
             
+            # Motor Torque / Steering Torque
+            if hasattr(cs, 'steeringTorque'):
+                publish_safely(client, "openrivian/vehicle/controls/steering_torque", cs.steeringTorque)
+            if hasattr(cs, 'steeringTorqueEps'):
+                publish_safely(client, "openrivian/vehicle/controls/steering_torque_eps", cs.steeringTorqueEps)
+            if hasattr(cs, 'aEgo'):
+                publish_safely(client, "openrivian/vehicle/powertrain/a_ego", cs.aEgo)
+            if hasattr(cs, 'engineRpmDEPRECATED'):
+                publish_safely(client, "openrivian/vehicle/powertrain/engine_rpm", cs.engineRpmDEPRECATED)
+
+            # Wheel Speeds
+            if hasattr(cs, 'wheelSpeeds'):
+                ws = cs.wheelSpeeds
+                if hasattr(ws, 'fl'): publish_safely(client, "openrivian/vehicle/powertrain/wheel_speed_fl", ws.fl)
+                if hasattr(ws, 'fr'): publish_safely(client, "openrivian/vehicle/powertrain/wheel_speed_fr", ws.fr)
+                if hasattr(ws, 'rl'): publish_safely(client, "openrivian/vehicle/powertrain/wheel_speed_rl", ws.rl)
+                if hasattr(ws, 'rr'): publish_safely(client, "openrivian/vehicle/powertrain/wheel_speed_rr", ws.rr)
+
             # Gear
             gear_str = str(cs.gearShifter) if hasattr(cs, 'gearShifter') else "unknown"
             publish_safely(client, "openrivian/vehicle/powertrain/gear", gear_str)
@@ -94,6 +112,32 @@ def main():
             if hasattr(cs, 'fuelGauge') and cs.fuelGauge > 0:
                 publish_safely(client, "openrivian/vehicle/powertrain/soc", cs.fuelGauge * 100.0)
 
+        # --- CONTROLS STATE (ADAS) ---
+        if sm.updated['controlsState']:
+            ctrl = sm['controlsState']
+            if hasattr(ctrl, 'enabled'):
+                publish_safely(client, "openrivian/adas/enabled", ctrl.enabled)
+            if hasattr(ctrl, 'activeDEPRECATED'):
+                publish_safely(client, "openrivian/adas/active", ctrl.activeDEPRECATED)
+            
+        # --- RADAR STATE ---
+        if sm.updated['radarState']:
+            rs = sm['radarState']
+            if hasattr(rs, 'leadOne') and hasattr(rs.leadOne, 'status') and rs.leadOne.status:
+                publish_safely(client, "openrivian/adas/radar/lead_one_d_rel", rs.leadOne.dRel)
+                publish_safely(client, "openrivian/adas/radar/lead_one_v_rel", rs.leadOne.vRel)
+            else:
+                publish_safely(client, "openrivian/adas/radar/lead_one_d_rel", -1)
+
+        # --- MANAGER STATE (Camera Health) ---
+        if sm.updated['managerState']:
+            ms = sm['managerState']
+            if hasattr(ms, 'processes'):
+                for p in ms.processes:
+                    if p.name == "camerad":
+                        publish_safely(client, "openrivian/device/hardware/camerad_running", p.running)
+                        break
+
         # --- DEVICE STATE (Comma hardware) ---
         if sm.updated['deviceState']:
             ds = sm['deviceState']
@@ -108,7 +152,11 @@ def main():
         # --- PANDA STATE ---
         if sm.updated['pandaStates'] and len(sm['pandaStates']) > 0:
             ps = sm['pandaStates'][0]
-            publish_safely(client, "openrivian/vehicle/powertrain/ignition", ps.ignitionLine or ps.ignitionCan)
+            # Handle both ignitionLine and ignitionCan depending on openpilot version
+            ignition = False
+            if hasattr(ps, 'ignitionLine'): ignition = ignition or ps.ignitionLine
+            if hasattr(ps, 'ignitionCan'): ignition = ignition or ps.ignitionCan
+            publish_safely(client, "openrivian/vehicle/powertrain/ignition", ignition)
             publish_safely(client, "openrivian/device/hardware/voltage", ps.voltage / 1000.0)
 
         # --- LOCATION ---
