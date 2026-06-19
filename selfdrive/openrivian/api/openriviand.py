@@ -9,9 +9,9 @@ def main():
 
     while True:
         # Check if we are authenticated
-        token_bytes = params.get("RivianAccessToken")
-        if token_bytes:
-            token = token_bytes.decode('utf-8')
+        token_raw = params.get("RivianAccessToken")
+        if token_raw:
+            token = token_raw.decode('utf-8') if isinstance(token_raw, bytes) else str(token_raw)
             pass # TODO: In future iterations, we will fetch ABRP routes here.
             
         time.sleep(5)
