@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
+import os
+try:
+    os.nice(19)
+except Exception:
+    pass
+
 import time
 import json
 import logging
-import paho.mqtt.client as mqtt
+try:
+    import paho.mqtt.client as mqtt
+except ImportError:
+    mqtt = None
 
 import os
 import sys
@@ -96,13 +105,13 @@ def publish_all_params(client):
             last_published_values[param] = val
 
 def main():
-    try:
-        os.nice(19)
-    except Exception as e:
-        logging.warning(f"Failed to set nice value: {e}")
 
     logging.basicConfig(level=logging.INFO)
     logging.info("[*] Starting Settings Sync Bridge...")
+
+    if mqtt is None:
+        logging.error("Missing paho-mqtt. Gracefully exiting mqtt2params.")
+        return
 
     client = mqtt.Client()
     client.on_connect = on_connect

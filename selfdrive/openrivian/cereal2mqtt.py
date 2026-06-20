@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
+import os
+try:
+    os.nice(19)
+except Exception:
+    pass
+
 import time
 import json
 import logging
-import paho.mqtt.client as mqtt
+try:
+    import paho.mqtt.client as mqtt
+except ImportError:
+    mqtt = None
 
 # Add openpilot root to python path so we can import cereal
 import os
@@ -34,15 +43,13 @@ def publish_safely(client, topic, payload):
         logging.debug(f"Failed to publish {topic}: {e}")
 
 def main():
-    # Deprioritize this process to the absolute lowest CPU scheduler priority (19)
-    # This ensures that our additive scripts CANNOT starve radard or other critical openpilot processes.
-    try:
-        os.nice(19)
-    except Exception as e:
-        logging.warning(f"Failed to set nice value: {e}")
 
     logging.basicConfig(level=logging.INFO)
     logging.info("[*] Starting Cereal to MQTT Bridge...")
+
+    if mqtt is None:
+        logging.error("Missing paho-mqtt. Gracefully exiting cereal2mqtt.")
+        return
 
     client = mqtt.Client()
     client.on_connect = on_connect
@@ -111,6 +118,20 @@ def main():
             # Battery / Fuel (If available on CAN)
             if hasattr(cs, 'fuelGauge') and cs.fuelGauge > 0:
                 publish_safely(client, "openrivian/vehicle/powertrain/soc", cs.fuelGauge * 100.0)
+
+            # EV Charging State
+            if hasattr(cs, 'charging'):
+                publish_safely(client, "openrivian/vehicle/powertrain/charging", cs.charging)
+
+            # ADAS & Blindspot Data
+            if hasattr(cs, 'leftBlindspot'):
+                publish_safely(client, "openrivian/vehicle/adas/left_blindspot", cs.leftBlindspot)
+            if hasattr(cs, 'rightBlindspot'):
+                publish_safely(client, "openrivian/vehicle/adas/right_blindspot", cs.rightBlindspot)
+            if hasattr(cs, 'cruiseState'):
+                publish_safely(client, "openrivian/vehicle/adas/cruise_enabled", getattr(cs.cruiseState, 'enabled', False))
+                publish_safely(client, "openrivian/vehicle/adas/cruise_speed_mph", getattr(cs.cruiseState, 'speed', 0.0) * 2.23694)
+                publish_safely(client, "openrivian/vehicle/adas/cruise_available", getattr(cs.cruiseState, 'available', False))
 
         # --- CONTROLS STATE (ADAS) ---
         if sm.updated['controlsState']:

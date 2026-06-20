@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
+import os
+try:
+    os.nice(19)
+except Exception:
+    pass
+
 import asyncio
 import logging
 import sys
-from amqtt.broker import Broker
+try:
+    from amqtt.broker import Broker
+except ImportError:
+    Broker = None
 
 # Configure broker to listen on localhost (0.0.0.0) without persistence.
 # Keeps everything in RAM to protect EMMC lifespan.
@@ -50,11 +59,9 @@ async def run_broker():
         print("[*] MQTT Broker shutdown.")
 
 def main():
-    import os
-    try:
-        os.nice(19)
-    except Exception as e:
-        print(f"Failed to set nice value: {e}")
+    if Broker is None:
+        logging.error("Missing amqtt. Gracefully exiting mqttd.")
+        return
 
     try:
         asyncio.run(run_broker())
