@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+import os
+try:
+    os.nice(19)
+except Exception:
+    pass
+
 import time
 import os
 from openpilot.common.swaglog import cloudlog
@@ -31,11 +37,7 @@ def main():
     """
     Entry point for the background process.
     """
-    # 1. ALWAYS deprioritize your feature so Comma's driving logic gets CPU priority.
-    try:
-        os.nice(19)
-    except Exception as e:
-        cloudlog.warning(f"Failed to set nice value: {e}")
+    """
 
     cloudlog.info("MyFeature daemon started.")
     params = Params()

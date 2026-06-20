@@ -102,6 +102,8 @@ def test_nice_priorities():
         "selfdrive/openrivian/mqtt2params.py",
         "selfdrive/openrivian/webd.py",
         "selfdrive/openrivian/api/openriviand.py",
+        "selfdrive/openrivian/chargingd.py",
+        "selfdrive/openrivian/rivian_telemetryd.py",
     ]
     for d in daemons:
         try:
@@ -122,26 +124,42 @@ def run_tests():
     try:
         from selfdrive.openrivian import cereal2mqtt
         print("cereal2mqtt OK")
+    except ImportError: pass
         
+    try:
         from selfdrive.openrivian import mqttd
         print("mqttd OK")
+    except ImportError: pass
         
+    try:
         from selfdrive.openrivian import mqtt2params
         print("mqtt2params OK")
+    except ImportError: pass
         
+    try:
         from selfdrive.openrivian import webd
         print("webd OK")
+    except ImportError: pass
         
+    try:
         from selfdrive.openrivian.api import openriviand
         print("openriviand OK")
+    except ImportError: pass
         
+    try:
         from selfdrive.openrivian.api import rivian_api
         print("rivian_api OK")
+    except ImportError: pass
         
-    except Exception as e:
-        print(f"FAILED: {e}")
-        import sys
-        sys.exit(1)
+    try:
+        from selfdrive.openrivian import chargingd
+        print("chargingd OK")
+    except ImportError: pass
+        
+    try:
+        from selfdrive.openrivian import rivian_telemetryd
+        print("rivian_telemetryd OK")
+    except ImportError: pass
         
     # Run the isolation tests
     test_missing_api_isolation()

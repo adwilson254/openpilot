@@ -39,6 +39,14 @@ jobs:
         run: |
           PYTHONPATH=. uv run python3 selfdrive/openrivian/tests/test_daemons.py
 
+      - name: Auto-Merge Feature Branch to dev-test
+        if: success() && github.ref != 'refs/heads/dev-test' && github.ref != 'refs/heads/dev' && github.event_name == 'push'
+        run: |
+          git fetch origin dev-test
+          git checkout dev-test
+          git merge origin/${{ github.ref_name }} --no-edit
+          git push origin dev-test
+
       - name: Fast-Forward Dev Branch
         if: success() && github.ref == 'refs/heads/dev-test'
         run: |
