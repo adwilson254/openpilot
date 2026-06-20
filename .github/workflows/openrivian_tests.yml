@@ -1,0 +1,96 @@
+name: OpenRivian Tests & CI/CD
+on:
+  push:
+    branches:
+      - '**'
+
+jobs:
+  test_feature:
+    name: Test Feature Branch
+    runs-on: ubuntu-latest
+    if: github.ref != 'refs/heads/dev-test' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/clean'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+      - name: Run OpenRivian Daemon Tests
+        run: |
+          PYTHONPATH=. uv run python3 selfdrive/openrivian/tests/test_daemons.py
+
+  build_dev_test:
+    name: Rebuild dev-test
+    runs-on: ubuntu-latest
+    needs: test_feature
+    permissions:
+      contents: write
+    if: success() && github.ref != 'refs/heads/can-decode' && github.ref != 'refs/heads/dev-test' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/clean' && github.event_name == 'push'
+    steps:
+      - name: Checkout Clean
+        uses: actions/checkout@v4
+        with:
+          ref: clean
+          fetch-depth: 0
+
+      - name: Setup Git User
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Rebuild dev-test from clean
+        run: |
+          # Checkout clean as the base for the new dev-test
+          git checkout -B dev-test
+
+          # Fetch all remote branches
+          git fetch origin
+          
+          # List of active feature branches to merge into dev-test
+          # EXPLICITLY EXCLUDES can-decode to keep it standalone
+          FEATURE_BRANCHES=("api" "web-dashboard" "mqtt" "feature/web-perf-fix")
+          
+          for branch in "${FEATURE_BRANCHES[@]}"; do
+            echo "Merging origin/$branch into dev-test..."
+            # Try merging; if it fails, abort the workflow so we don't push a broken state
+            git merge "origin/$branch" --no-edit || { echo "Merge conflict with $branch"; exit 1; }
+          done
+          
+          # Push the newly rebuilt dev-test (force push because it's a rebuilt state)
+          git push origin dev-test --force
+
+  deploy_dev:
+    name: Deploy to Dev (Release Candidate)
+    runs-on: ubuntu-latest
+    # Wait, the above job PUSHES to dev-test. This pushes a commit. 
+    # That push will trigger this workflow again, but this time github.ref == 'refs/heads/dev-test'.
+    # So we don't need a deploy_dev job here dependent on build_dev_test. 
+    # We just run tests on dev-test when it gets pushed, and if it passes, fast-forward dev!
+    if: github.ref == 'refs/heads/dev-test'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install uv
+        uses: astral-sh/setup-uv@v2
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+      - name: Run Integration Tests
+        run: |
+          PYTHONPATH=. uv run python3 selfdrive/openrivian/tests/test_daemons.py
+      - name: Fast-Forward Dev Branch
+        if: success()
+        run: |
+          git push origin HEAD:dev --force
