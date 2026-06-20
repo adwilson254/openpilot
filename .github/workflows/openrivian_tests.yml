@@ -4,6 +4,10 @@ on:
     branches:
       - '**'
 
+concurrency:
+  group: build-dev
+  cancel-in-progress: true
+
 jobs:
   test_feature:
     name: Test Feature Branch
@@ -51,7 +55,7 @@ jobs:
           
           # List of active feature branches to merge into dev-test
           # EXPLICITLY EXCLUDES can-decode/can-debug to keep it standalone
-          FEATURE_BRANCHES=("api" "web-dashboard" "mqtt" "feature/web-perf-fix")
+          FEATURE_BRANCHES=("api" "web-dashboard" "mqtt")
           
           for branch in "${FEATURE_BRANCHES[@]}"; do
             echo "Merging origin/$branch into dev-test..."
@@ -67,6 +71,10 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
         
+      - name: Run Dependency Validation
+        run: |
+          PYTHONPATH=. uv run python3 selfdrive/openrivian/tests/test_dependencies.py
+
       - name: Run Extensive Integration Tests on dev-test
         run: |
           PYTHONPATH=. uv run python3 selfdrive/openrivian/tests/test_daemons.py
@@ -77,5 +85,17 @@ jobs:
           echo "All tests passed on combined feature branches. Pushing dev-test."
           git push origin dev-test --force
           
+          # Check what changed before promoting
+          git fetch origin dev
           echo "Promoting dev-test to dev (Release Candidate)."
           git push origin dev-test:dev --force
+          
+          # Determine dev-pre strategy
+          echo "Checking for compiled file changes..."
+          if git diff --name-only origin/dev dev-test | grep -qE '\.(c|cc|cpp|h|hpp)$|SConscript'; then
+            echo "::warning::Compiled files changed! Skipping dev-pre automatic push."
+            echo "You MUST manually SSH into the Comma device and run selfdrive/ui/openrivian/scripts/build_prebuilt.sh to update dev-pre."
+          else
+            echo "Only Python changes detected. Automatically fast-forwarding dev-pre."
+            git push origin dev-test:dev-pre --force
+          fi
