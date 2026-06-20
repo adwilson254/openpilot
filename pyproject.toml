@@ -14,6 +14,10 @@ dependencies = [
   "pyserial",     # pigeond + qcomgpsd
   "requests",     # many one-off uses
   "paho-mqtt",    # used by OpenRivian components
+  "flask",        # used by OpenRivian components
+  "flask-cors",   # used by OpenRivian components
+  "fastapi",      # used by OpenRivian components
+  "uvicorn",      # used by OpenRivian components
   "sympy",        # rednose + friends
   "crcmod-plus",  # cars + qcomgpsd
   "tqdm",         # cars (fw_versions.py) on start + many one-off uses
