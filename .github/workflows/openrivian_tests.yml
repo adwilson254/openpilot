@@ -51,7 +51,7 @@ jobs:
           
           # List of active feature branches to merge into dev-test
           # EXPLICITLY EXCLUDES can-decode to keep it standalone
-          FEATURE_BRANCHES=("api" "web-dashboard" "mqtt" "feature/web-perf-fix")
+          FEATURE_BRANCHES=("api" "web-dashboard" "mqtt" "feature/web-perf-fix" "feature/chargingd-optional" "feature/rivian-telemetry")
           
           for branch in "${FEATURE_BRANCHES[@]}"; do
             echo "Merging origin/$branch into dev-test..."
