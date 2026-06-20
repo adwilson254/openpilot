@@ -30,8 +30,8 @@ jobs:
     needs: test_feature
     permissions:
       contents: write
-    # Only run this pipeline when a feature branch (excluding can-decode) is pushed
-    if: success() && github.ref != 'refs/heads/can-decode' && github.ref != 'refs/heads/dev-test' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/clean' && github.event_name == 'push'
+    # Only run this pipeline when a feature branch (excluding can-decode/can-debug) is pushed
+    if: success() && github.ref != 'refs/heads/can-decode' && github.ref != 'refs/heads/can-debug' && github.ref != 'refs/heads/dev-test' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/clean' && github.event_name == 'push'
     steps:
       - name: Checkout Clean
         uses: actions/checkout@v4
@@ -50,8 +50,8 @@ jobs:
           git fetch origin
           
           # List of active feature branches to merge into dev-test
-          # EXPLICITLY EXCLUDES can-decode to keep it standalone
-          FEATURE_BRANCHES=("api" "web-dashboard" "mqtt" "feature/web-perf-fix" "feature/chargingd-optional" "feature/rivian-telemetry")
+          # EXPLICITLY EXCLUDES can-decode/can-debug to keep it standalone
+          FEATURE_BRANCHES=("api" "web-dashboard" "mqtt" "feature/web-perf-fix")
           
           for branch in "${FEATURE_BRANCHES[@]}"; do
             echo "Merging origin/$branch into dev-test..."

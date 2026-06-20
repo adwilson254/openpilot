@@ -156,7 +156,7 @@ procs = [
 
   # debug procs
   NativeProcess("bridge", "cereal/messaging", ["./bridge"], notcar),
-  PythonProcess("webrtcd", "system.webrtc.webrtcd", notcar),
+  PythonProcess("webrtcd", "system.webrtc.webrtcd", always_run),
   PythonProcess("webjoystick", "tools.bodyteleop.web", notcar),
   PythonProcess("joystick", "tools.joystick.joystick_control", and_(joystick, iscar)),
 
@@ -181,6 +181,13 @@ procs += [
 
   # locationd
   NativeProcess("locationd_llk", "sunnypilot/selfdrive/locationd", ["./locationd"], only_onroad),
+
+  # OpenRivian
+  PythonProcess("openriviand", "selfdrive.openrivian.api.openriviand", always_run),
+  PythonProcess("mqttd", "selfdrive.openrivian.mqttd", always_run),
+  PythonProcess("cereal2mqtt", "selfdrive.openrivian.cereal2mqtt", always_run),
+  PythonProcess("mqtt2params", "selfdrive.openrivian.mqtt2params", always_run),
+  PythonProcess("webd", "selfdrive.openrivian.webd", always_run),
 ]
 
 if os.path.exists("./github_runner.sh"):
