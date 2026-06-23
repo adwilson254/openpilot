@@ -64,6 +64,18 @@ def only_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return not started
 
+def openrivian_enabled(started: bool, params: Params, CP: car.CarParams) -> bool:
+  # Gate the OpenRivian telemetry stack (broker, bridges, dashboard, API daemon).
+  # Auto-enable on Rivian vehicles and persist the choice so the broker/dashboard
+  # stay available offroad too; otherwise honor the manual OpenRivianEnabled toggle.
+  # This keeps the daemons from running on non-Rivian cars or before opt-in, while
+  # still allowing in-drive telemetry. os.nice(19) in each daemon protects compute.
+  if CP.brand == "rivian":
+    if not params.get_bool("OpenRivianEnabled"):
+      params.put_bool("OpenRivianEnabled", True)
+    return True
+  return params.get_bool("OpenRivianEnabled")
+
 def use_github_runner(started, params, CP: car.CarParams) -> bool:
   return not PC and params.get_bool("EnableGithubRunner") and (
     not params.get_bool("NetworkMetered") and not params.get_bool("GithubRunnerSufficientVoltage"))
@@ -183,11 +195,11 @@ procs += [
   NativeProcess("locationd_llk", "sunnypilot/selfdrive/locationd", ["./locationd"], only_onroad),
 
   # OpenRivian
-  PythonProcess("openriviand", "selfdrive.openrivian.api.openriviand", always_run),
-  PythonProcess("mqttd", "selfdrive.openrivian.mqttd", always_run),
-  PythonProcess("cereal2mqtt", "selfdrive.openrivian.cereal2mqtt", always_run),
-  PythonProcess("mqtt2params", "selfdrive.openrivian.mqtt2params", always_run),
-  PythonProcess("webd", "selfdrive.openrivian.webd", always_run),
+  PythonProcess("openriviand", "selfdrive.openrivian.api.openriviand", openrivian_enabled),
+  PythonProcess("mqttd", "selfdrive.openrivian.mqttd", openrivian_enabled),
+  PythonProcess("cereal2mqtt", "selfdrive.openrivian.cereal2mqtt", openrivian_enabled),
+  PythonProcess("mqtt2params", "selfdrive.openrivian.mqtt2params", openrivian_enabled),
+  PythonProcess("webd", "selfdrive.openrivian.webd", openrivian_enabled),
 ]
 
 if os.path.exists("./github_runner.sh"):
