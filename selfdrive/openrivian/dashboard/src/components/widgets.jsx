@@ -1,4 +1,15 @@
-import { fmt } from '../lib/format';
+import { fmt, gearLabel } from '../lib/format';
+
+export function GearStrip({ gear }) {
+  const cur = gearLabel(gear);
+  return (
+    <div className="gear-strip">
+      {['P', 'R', 'N', 'D'].map((g) => (
+        <span key={g} className={`gear-cell ${cur === g ? 'on' : ''}`}>{g}</span>
+      ))}
+    </div>
+  );
+}
 
 export function Tile({ label, value, unit, tone = '', sub, spark, sparkColor }) {
   return (

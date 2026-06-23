@@ -2,6 +2,32 @@ import { useTelemetry } from '../lib/mqtt';
 import { T, fmt } from '../lib/format';
 import { Tile } from '../components/widgets';
 
+function Breadcrumb({ lats, lons }) {
+  const n = Math.min(lats.length, lons.length);
+  if (n < 2) {
+    return <div className="empty">Trail builds as GPS fixes arrive…</div>;
+  }
+  const pts = [];
+  for (let i = lats.length - n; i < lats.length; i++) pts.push([lats[i], lons[lons.length - n + (i - (lats.length - n))]]);
+  const la = pts.map((p) => p[0]); const lo = pts.map((p) => p[1]);
+  const minLa = Math.min(...la), maxLa = Math.max(...la), minLo = Math.min(...lo), maxLo = Math.max(...lo);
+  const spanLa = (maxLa - minLa) || 1e-5, spanLo = (maxLo - minLo) || 1e-5;
+  const W = 300, H = 200, pad = 16;
+  // x = longitude (east →), y = latitude (north up → invert)
+  const xy = pts.map(([latv, lonv]) => {
+    const x = pad + ((lonv - minLo) / spanLo) * (W - 2 * pad);
+    const y = pad + (1 - (latv - minLa) / spanLa) * (H - 2 * pad);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const [cx, cy] = xy[xy.length - 1].split(',');
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} width="100%" height="auto" style={{ maxHeight: 260 }}>
+      <polyline points={xy.join(' ')} fill="none" stroke="var(--teal)" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={cx} cy={cy} r="5" fill="var(--yellow)" />
+    </svg>
+  );
+}
+
 export default function Location() {
   const t = useTelemetry();
   const lat = t.get(T.lat), lon = t.get(T.lon);
@@ -32,6 +58,11 @@ export default function Location() {
       <Tile label="Latitude" value={hasFix ? fmt(lat, 5) : '—'} />
       <Tile label="Longitude" value={hasFix ? fmt(lon, 5) : '—'} />
       <Tile label="Altitude" value={fmt(t.get(T.alt), 0)} unit=" m" />
+
+      <div className="card" style={{ gridColumn: '1 / -1' }}>
+        <h2>Trail (this session)</h2>
+        <Breadcrumb lats={t.getHistory(T.lat)} lons={t.getHistory(T.lon)} />
+      </div>
 
       {hasFix && (
         <div className="card" style={{ gridColumn: '1 / -1' }}>

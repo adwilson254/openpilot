@@ -2,6 +2,7 @@ import { useTelemetry } from '../lib/mqtt';
 import { usePrefs } from '../lib/prefs';
 import { T, fmt, bool } from '../lib/format';
 import { Tile, StatusChip } from '../components/widgets';
+import LeadScope from '../components/LeadScope';
 
 export default function Adas() {
   const t = useTelemetry();
@@ -22,6 +23,8 @@ export default function Adas() {
         </div>
         <StatusChip on={bool(t.get(T.cruiseAvail))} labelOn="CRUISE AVAILABLE" labelOff="CRUISE UNAVAIL" />
       </div>
+
+      <LeadScope />
 
       <Tile label="Set Speed" value={fmt(setSp.v, 0)} unit={` ${setSp.u}`} tone="yellow" />
       <Tile label="Cruise Enabled" value={bool(t.get(T.cruiseEnabled)) ? 'YES' : 'NO'} tone={bool(t.get(T.cruiseEnabled)) ? 'teal' : 'dim'} />

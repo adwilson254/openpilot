@@ -1,9 +1,9 @@
 import { useTelemetry } from '../lib/mqtt';
 import { usePrefs } from '../lib/prefs';
 import { useTrip, hms } from '../lib/trip';
-import { T, fmt, bool, gearLabel } from '../lib/format';
+import { T, fmt, bool } from '../lib/format';
 import RivianTruck from '../components/RivianTruck';
-import { Tile, StatusChip, Ring } from '../components/widgets';
+import { Tile, StatusChip, Ring, GearStrip } from '../components/widgets';
 
 export default function Drive() {
   const t = useTelemetry();
@@ -29,8 +29,8 @@ export default function Drive() {
               <span className="hero-speed">{fmt(spd.v, 0)}</span>
               <span className="hero-unit">{spd.u}</span>
             </div>
-            <div style={{ textAlign: 'right' }}>
-              <div className="val yellow" style={{ fontSize: 44, fontWeight: 800 }}>{gearLabel(t.get(T.gear))}</div>
+            <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 10 }}>
+              <GearStrip gear={t.get(T.gear)} />
               <StatusChip on={adasOn} labelOn="OPENPILOT ENGAGED" labelOff="OPENPILOT READY" />
             </div>
           </div>

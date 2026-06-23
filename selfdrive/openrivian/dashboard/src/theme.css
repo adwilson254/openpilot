@@ -227,3 +227,15 @@ a.plain { color: var(--blue); text-decoration: none; font-weight: 700; }
   box-shadow: 0 16px 50px rgba(0,0,0,0.6); }
 .app-settings .label { font-size: 11px; letter-spacing: 1.3px; text-transform: uppercase; color: var(--text-faint); font-weight: 700; }
 @media (max-width: 860px) { .app-settings { right: 14px; top: 62px; } }
+
+/* ---------- Gear strip ---------- */
+.gear-strip { display: inline-flex; gap: 4px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 4px; }
+.gear-cell { width: 30px; height: 34px; display: grid; place-items: center; border-radius: 7px; font-weight: 800; font-size: 17px; color: var(--text-faint); }
+.gear-cell.on { background: var(--yellow); color: #111; }
+
+/* ---------- Signals: groups + pins ---------- */
+.sig-group { display: flex; align-items: center; justify-content: space-between; cursor: pointer; font-weight: 800;
+  text-transform: uppercase; letter-spacing: 1px; font-size: 13px; color: var(--text-dim); padding: 8px 4px; user-select: none; }
+.sig-count { background: var(--surface-3); color: var(--text-faint); border-radius: 999px; padding: 2px 9px; font-size: 12px; }
+.pin { background: none; border: none; cursor: pointer; font-size: 16px; color: var(--text-faint); padding: 2px; line-height: 1; }
+.pin.on { color: var(--yellow); }

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import './theme.css';
 import { useTelemetry } from './lib/mqtt';
 import { usePrefs } from './lib/prefs';
@@ -26,6 +26,15 @@ const TABS = [
   { id: 'signals', label: 'Signals', icon: '📈', view: Signals },
   { id: 'settings', label: 'Settings', icon: '⚙️', view: Settings },
 ];
+
+const TAB_IDS = TABS.map((t) => t.id);
+
+function initialTab() {
+  const h = window.location.hash.replace('#', '');
+  if (TAB_IDS.includes(h)) return h;
+  try { const s = localStorage.getItem('orv.tab'); if (TAB_IDS.includes(s)) return s; } catch { /* noop */ }
+  return 'drive';
+}
 
 function ConnBadge() {
   const { status } = useTelemetry();
@@ -65,10 +74,28 @@ function AppSettings({ onClose }) {
 }
 
 export default function App() {
-  const [tab, setTab] = useState('drive');
+  const [tab, setTabState] = useState(initialTab);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const current = TABS.find((t) => t.id === tab) || TABS[0];
   const View = current.view;
+
+  const setTab = (id) => {
+    setTabState(id);
+    try { localStorage.setItem('orv.tab', id); } catch { /* noop */ }
+  };
+
+  useEffect(() => {
+    if (window.location.hash.replace('#', '') !== tab) window.location.hash = tab;
+  }, [tab]);
+
+  useEffect(() => {
+    const onHash = () => {
+      const h = window.location.hash.replace('#', '');
+      if (TAB_IDS.includes(h)) setTabState(h);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
 
   return (
     <div className="app">
