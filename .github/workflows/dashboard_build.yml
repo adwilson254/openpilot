@@ -37,9 +37,12 @@ jobs:
 
       - name: Verify dist/ matches committed bundle
         run: |
-          if ! git diff --quiet -- dist; then
-            echo "::error::dashboard/dist is out of date. Run 'npm run build' in selfdrive/openrivian/dashboard and commit the updated dist/."
-            git --no-pager diff --stat -- dist
+          # Only check the compiled app bundle (hashed JS/CSS + index.html). The copied
+          # static assets (favicon.svg/icons.svg) are LFS-managed and the build only
+          # cosmetically minifies them, so they are excluded from the staleness gate.
+          if ! git diff --quiet -- dist/assets dist/index.html; then
+            echo "::error::dashboard/dist bundle is out of date. Run 'npm run build' in selfdrive/openrivian/dashboard and commit the updated dist/."
+            git --no-pager diff --stat -- dist/assets dist/index.html
             exit 1
           fi
-          echo "dashboard/dist is up to date with src."
+          echo "dashboard/dist bundle is up to date with src."
