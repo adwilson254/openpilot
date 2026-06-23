@@ -13,11 +13,6 @@ dependencies = [
   "sounddevice",  # micd + soundd
   "pyserial",     # pigeond + qcomgpsd
   "requests",     # many one-off uses
-  "paho-mqtt",    # used by OpenRivian components
-  "flask",        # used by OpenRivian components
-  "flask-cors",   # used by OpenRivian components
-  "fastapi",      # used by OpenRivian components
-  "uvicorn",      # used by OpenRivian components
   "sympy",        # rednose + friends
   "crcmod-plus",  # cars + qcomgpsd
   "tqdm",         # cars (fw_versions.py) on start + many one-off uses
@@ -71,8 +66,9 @@ dependencies = [
   "qrcode",
   "jeepney",
   "pillow",
-  "amqtt>=0.11.3",
-  "paho-mqtt>=2.1.0",
+  # OpenRivian telemetry stack
+  "amqtt>=0.11.3",   # in-RAM MQTT broker (mqttd)
+  "paho-mqtt>=2.1.0",  # cereal2mqtt / mqtt2params bridges
 ]
 
 [project.optional-dependencies]

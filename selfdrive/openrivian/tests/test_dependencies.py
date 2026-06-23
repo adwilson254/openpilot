@@ -8,11 +8,8 @@ class TestOpenRivianDependencies(unittest.TestCase):
         to execute on the Comma device are correctly installed and resolvable in the environment.
         """
         required_packages = [
-            "flask",
-            "flask_cors",
             "paho.mqtt",
-            "fastapi",
-            "uvicorn",
+            "amqtt",
             "cereal",
             "openpilot.common"
         ]
