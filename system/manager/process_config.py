@@ -64,17 +64,9 @@ def only_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return not started
 
-def openrivian_enabled(started: bool, params: Params, CP: car.CarParams) -> bool:
-  # Gate the OpenRivian telemetry stack (broker, bridges, dashboard, API daemon).
-  # Auto-enable on Rivian vehicles and persist the choice so the broker/dashboard
-  # stay available offroad too; otherwise honor the manual OpenRivianEnabled toggle.
-  # This keeps the daemons from running on non-Rivian cars or before opt-in, while
-  # still allowing in-drive telemetry. os.nice(19) in each daemon protects compute.
-  if CP.brand == "rivian":
-    if not params.get_bool("OpenRivianEnabled"):
-      params.put_bool("OpenRivianEnabled", True)
-    return True
-  return params.get_bool("OpenRivianEnabled")
+# OpenRivian telemetry-stack gate (auto-on for Rivian, else honors OpenRivianEnabled).
+# Implemented in a dependency-free module so it can be unit-tested in isolation.
+from openpilot.selfdrive.openrivian.process_gating import openrivian_enabled
 
 def use_github_runner(started, params, CP: car.CarParams) -> bool:
   return not PC and params.get_bool("EnableGithubRunner") and (
