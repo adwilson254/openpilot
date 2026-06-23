@@ -1,4 +1,5 @@
 import { useTelemetry } from '../lib/mqtt';
+import { usePrefs } from '../lib/prefs';
 import { T, fmt, bool } from '../lib/format';
 import { Tile, StatusChip } from '../components/widgets';
 
@@ -20,7 +21,9 @@ function SteeringWheel({ angle = 0 }) {
 
 export default function Vehicle() {
   const t = useTelemetry();
+  const p = usePrefs();
   const angle = Number(t.get(T.steerAngle, 0)) || 0;
+  const sp = p.speed(Number(t.get(T.speed_mph, 0)) || 0);
   return (
     <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
       <div className="card" style={{ display: 'grid', placeItems: 'center', gap: 8 }}>
@@ -34,7 +37,7 @@ export default function Vehicle() {
       <Tile label="Steering Torque" value={fmt(t.get(T.steerTorque), 2)} />
       <Tile label="EPS Torque" value={fmt(t.get(T.steerTorqueEps), 2)} />
       <Tile label="Acceleration" value={fmt(t.get(T.aEgo), 2)} unit=" m/s²" />
-      <Tile label="Speed" value={fmt(t.get(T.speed_mph), 0)} unit=" mph" />
+      <Tile label="Speed" value={fmt(sp.v, 0)} unit={` ${sp.u}`} />
       <Tile label="Standstill" value={bool(t.get(T.standstill)) ? 'YES' : 'NO'} tone="dim" />
 
       <div className="card">

@@ -1,11 +1,14 @@
 import { useTelemetry } from '../lib/mqtt';
+import { usePrefs } from '../lib/prefs';
 import { T, fmt, bool } from '../lib/format';
 import { Tile, Ring, StatusChip } from '../components/widgets';
 
 export default function Device() {
   const t = useTelemetry();
+  const p = usePrefs();
   const temp = Number(t.get(T.cpuTemp));
   const tempTone = temp >= 85 ? 'red' : temp >= 70 ? 'amber' : 'teal';
+  const tp = p.temp(temp);
   return (
     <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
       <div className="card" style={{ display: 'grid', placeItems: 'center' }}>
@@ -14,7 +17,8 @@ export default function Device() {
       <div className="card" style={{ display: 'grid', placeItems: 'center' }}>
         <Ring value={t.get(T.freeSpace)} label="Free Storage" tone="var(--teal)" />
       </div>
-      <Tile label="CPU Temp" value={fmt(t.get(T.cpuTemp), 0)} unit="°C" tone={tempTone} />
+      <Tile label="CPU Temp" value={fmt(tp.v, 0)} unit={tp.u} tone={tempTone}
+            spark={t.getHistory(T.cpuTemp)} sparkColor="var(--amber)" />
       <Tile label="Panda Voltage" value={fmt(t.get(T.voltage), 1)} unit=" V" />
       <Tile label="Power Draw" value={fmt(t.get(T.powerDraw), 1)} unit=" W" />
       <div className="card">

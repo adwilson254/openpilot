@@ -5,6 +5,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import Paho from 'paho-mqtt';
+import { simEnabled, simSnapshot } from './sim';
 
 const TelemetryContext = createContext(null);
 
@@ -14,16 +15,41 @@ const STALE_MS = 5000;    // older than this => considered stale
 function resolveHost() {
   const p = new URLSearchParams(window.location.search).get('host');
   if (p) return p;
-  return window.location.hostname || 'localhost';
+  let saved = '';
+  try { saved = localStorage.getItem('orv.host') || ''; } catch { /* noop */ }
+  return saved || window.location.hostname || 'localhost';
 }
 
 export function TelemetryProvider({ children }) {
   const [signals, setSignals] = useState({}); // topic -> { value, ts }
-  const [status, setStatus] = useState('connecting'); // connecting | live | offline
+  const [status, setStatus] = useState(() => (simEnabled() ? 'sim' : 'connecting')); // connecting | live | offline | sim
   const histRef = useRef({}); // topic -> number[]
   const clientRef = useRef(null);
 
   useEffect(() => {
+    // Demo mode: feed synthetic values into the same store (no broker needed).
+    if (simEnabled()) {
+      const t0 = Date.now();
+      const tick = () => {
+        const t = (Date.now() - t0) / 1000;
+        const snap = simSnapshot(t);
+        const ts = Date.now();
+        const next = {};
+        for (const [topic, value] of Object.entries(snap)) {
+          next[topic] = { value, ts };
+          if (typeof value === 'number') {
+            const h = histRef.current[topic] || (histRef.current[topic] = []);
+            h.push(value);
+            if (h.length > HISTORY_LEN) h.shift();
+          }
+        }
+        setSignals((prev) => ({ ...prev, ...next }));
+      };
+      tick();
+      const id = setInterval(tick, 200); // 5 Hz
+      return () => clearInterval(id);
+    }
+
     let active = true;
     let timer = null;
 

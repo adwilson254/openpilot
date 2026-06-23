@@ -1,6 +1,6 @@
 import { fmt } from '../lib/format';
 
-export function Tile({ label, value, unit, tone = '', sub }) {
+export function Tile({ label, value, unit, tone = '', sub, spark, sparkColor }) {
   return (
     <div className="card tile">
       <span className="label">{label}</span>
@@ -8,6 +8,11 @@ export function Tile({ label, value, unit, tone = '', sub }) {
         {value}{unit && <small>{unit}</small>}
       </span>
       {sub && <span style={{ color: 'var(--text-faint)', fontSize: 13 }}>{sub}</span>}
+      {spark && spark.length > 1 && (
+        <div style={{ marginTop: 4 }}>
+          <Sparkline data={spark} color={sparkColor || 'var(--text-faint)'} width={130} height={26} />
+        </div>
+      )}
     </div>
   );
 }
