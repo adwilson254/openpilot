@@ -114,6 +114,27 @@ def test_nice_priorities():
             pass
     print(" -> All daemons have os.nice(19) to protect self-drive compute.")
 
+def test_build_mqtt_clients():
+    # Constructs the REAL paho-mqtt client (paho is intentionally not mocked) so this
+    # test fails loudly if the installed/pinned paho version stops supporting the API
+    # the bridges rely on. Import-only tests cannot catch that.
+    print("Testing real paho-mqtt client construction against the installed version...")
+    from selfdrive.openrivian import cereal2mqtt
+    from selfdrive.openrivian import mqtt2params
+    for mod in (cereal2mqtt, mqtt2params):
+        if mod.mqtt is None:
+            print(f"FAILED Client Test: paho-mqtt not importable in {mod.__name__}")
+            sys.exit(1)
+        try:
+            client = mod.build_client()
+        except Exception as e:
+            print(f"FAILED Client Test: build_client() raised in {mod.__name__}: {e}")
+            sys.exit(1)
+        if client is None:
+            print(f"FAILED Client Test: build_client() returned None in {mod.__name__}")
+            sys.exit(1)
+    print(" -> cereal2mqtt and mqtt2params construct paho clients OK with the installed version.")
+
 # We don't need to mock paho.mqtt because we added it via uv add
 # But we do need to mock its functions to raise LoopBreakException
 def run_tests():
@@ -147,6 +168,7 @@ def run_tests():
     test_missing_api_isolation()
     test_unauthenticated_api()
     test_nice_priorities()
+    test_build_mqtt_clients()
         
     print("ALL TESTS PASSED.")
 

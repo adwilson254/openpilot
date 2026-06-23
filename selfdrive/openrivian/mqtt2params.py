@@ -104,6 +104,13 @@ def publish_all_params(client):
             client.publish(f"openrivian/settings/status/{param}", json.dumps({"value": val}, default=str), retain=True)
             last_published_values[param] = val
 
+def build_client():
+    # Be explicit about the callback API version. paho-mqtt 2.x still defaults to
+    # VERSION1 but emits a DeprecationWarning on every start (noisy in device logs),
+    # and a future paho 3.x may drop the implicit default entirely. Passing it
+    # explicitly keeps our VERSION1-style callbacks valid and future-proof.
+    return mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
+
 def main():
 
     logging.basicConfig(level=logging.INFO)
@@ -113,7 +120,7 @@ def main():
         logging.error("Missing paho-mqtt. Gracefully exiting mqtt2params.")
         return
 
-    client = mqtt.Client()
+    client = build_client()
     client.on_connect = on_connect
     client.on_message = on_message
     

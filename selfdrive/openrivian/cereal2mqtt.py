@@ -42,6 +42,13 @@ def publish_safely(client, topic, payload):
     except Exception as e:
         logging.debug(f"Failed to publish {topic}: {e}")
 
+def build_client():
+    # Be explicit about the callback API version. paho-mqtt 2.x still defaults to
+    # VERSION1 but emits a DeprecationWarning on every start (noisy in device logs),
+    # and a future paho 3.x may drop the implicit default entirely. Passing it
+    # explicitly keeps our VERSION1-style callbacks valid and future-proof.
+    return mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
+
 def main():
 
     logging.basicConfig(level=logging.INFO)
@@ -51,7 +58,7 @@ def main():
         logging.error("Missing paho-mqtt. Gracefully exiting cereal2mqtt.")
         return
 
-    client = mqtt.Client()
+    client = build_client()
     client.on_connect = on_connect
     
     # Attempt to connect to the local broker. We loop because mqttd might still be starting up.
