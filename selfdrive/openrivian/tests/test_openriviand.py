@@ -1,16 +1,17 @@
-import unittest
+"""Tests for the openriviand API daemon."""
+from selfdrive.openrivian.api import openriviand
 
-class TestOpenRivianAPI(unittest.TestCase):
-    def test_import_openriviand(self):
-        """
-        Verify that the openriviand API daemon can be imported without syntax
-        or runtime initialization errors.
-        """
-        try:
-            from selfdrive.openrivian.api import openriviand
-            self.assertIsNotNone(openriviand)
-        except Exception as e:
-            self.fail(f"Failed to import openriviand: {e}")
 
-if __name__ == "__main__":
-    unittest.main()
+def test_import_openriviand():
+    assert openriviand is not None
+
+
+def test_step_without_token_is_graceful(fake_params):
+    # No RivianAccessToken -> must complete a step without raising.
+    openriviand.step(fake_params)
+
+
+def test_step_with_token_is_graceful(fake_params):
+    # Token present -> still a no-op today (ABRP fetch is a TODO), must not raise.
+    fake_params.put("RivianAccessToken", "sometoken")
+    openriviand.step(fake_params)
