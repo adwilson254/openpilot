@@ -10,41 +10,50 @@ PORT = 8081
 ROUTE_CACHE = []
 ROUTE_CACHE_LOCK = threading.Lock()
 
+ROUTES_PATH = "/data/media/0/realdata/"
+
+# Mock data used when the realdata directory is unavailable (e.g. local dev).
+MOCK_ROUTES = [
+    {"id": "2023-10-25--14-30-00", "date": "2023-10-25", "size_mb": 450},
+    {"id": "2023-10-24--09-15-00", "date": "2023-10-24", "size_mb": 1200},
+    {"id": "2023-10-20--18-45-00", "date": "2023-10-20", "size_mb": 310},
+]
+
+def scan_routes(routes_path=ROUTES_PATH, io_yield=0.01):
+    # Pure-ish helper (no globals/threads) so the route listing is unit-testable.
+    # Returns mock data when the realdata directory doesn't exist.
+    if not os.path.exists(routes_path):
+        return list(MOCK_ROUTES)
+
+    routes = []
+    for d in os.listdir(routes_path):
+        full = os.path.join(routes_path, d)
+        if os.path.isdir(full):
+            total_size = 0
+            for dirpath, _, filenames in os.walk(full):
+                for f in filenames:
+                    total_size += os.path.getsize(os.path.join(dirpath, f))
+                if io_yield:
+                    import time
+                    time.sleep(io_yield)  # Yield I/O gracefully
+            routes.append({
+                "id": d,
+                "date": d.split('--')[0] if '--' in d else d,
+                "size_mb": total_size // (1024 * 1024),
+            })
+    return routes
+
 def bg_cache_updater():
     import time
-    routes_path = "/data/media/0/realdata/"
     while True:
         try:
-            new_routes = []
-            if os.path.exists(routes_path):
-                for d in os.listdir(routes_path):
-                    if os.path.isdir(os.path.join(routes_path, d)):
-                        total_size = 0
-                        for dirpath, _, filenames in os.walk(os.path.join(routes_path, d)):
-                            for f in filenames:
-                                total_size += os.path.getsize(os.path.join(dirpath, f))
-                            time.sleep(0.01) # Yield I/O gracefully
-                        
-                        new_routes.append({
-                            "id": d,
-                            "date": d.split('--')[0] if '--' in d else d,
-                            "size_mb": total_size // (1024*1024)
-                        })
-            else:
-                # Mock data for local testing
-                new_routes = [
-                    {"id": "2023-10-25--14-30-00", "date": "2023-10-25", "size_mb": 450},
-                    {"id": "2023-10-24--09-15-00", "date": "2023-10-24", "size_mb": 1200},
-                    {"id": "2023-10-20--18-45-00", "date": "2023-10-20", "size_mb": 310}
-                ]
-            
+            new_routes = scan_routes()
             with ROUTE_CACHE_LOCK:
                 global ROUTE_CACHE
                 ROUTE_CACHE = new_routes
-                
         except Exception as e:
             logging.error(f"Error reading routes in bg thread: {e}")
-            
+
         time.sleep(30) # Only scan the disk every 30 seconds
 
 def main():
