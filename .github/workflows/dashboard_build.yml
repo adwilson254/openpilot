@@ -1,0 +1,45 @@
+name: Dashboard Build Check
+
+# Guards against the committed dashboard/dist/ bundle drifting from src/.
+# webd.py serves dashboard/dist/ as-is and nothing else rebuilds it, so a stale
+# bundle would silently ship an old UI. This rebuilds and fails if dist/ is not
+# up to date with the committed sources.
+
+on:
+  push:
+    branches:
+      - web-dashboard
+    paths:
+      - 'selfdrive/openrivian/dashboard/**'
+  workflow_dispatch:
+
+jobs:
+  build-check:
+    name: Build dashboard & verify dist/ is current
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: selfdrive/openrivian/dashboard
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Verify dist/ matches committed bundle
+        run: |
+          if ! git diff --quiet -- dist; then
+            echo "::error::dashboard/dist is out of date. Run 'npm run build' in selfdrive/openrivian/dashboard and commit the updated dist/."
+            git --no-pager diff --stat -- dist
+            exit 1
+          fi
+          echo "dashboard/dist is up to date with src."
