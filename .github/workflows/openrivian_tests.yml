@@ -26,7 +26,8 @@ jobs:
         run: uv sync --all-extras --dev
       - name: Run OpenRivian Daemon Tests
         run: |
-          PYTHONPATH=. uv run python3 selfdrive/openrivian/tests/test_daemons.py
+          PYTHONPATH=. uv run python -m pytest selfdrive/openrivian/tests \
+            --ignore=selfdrive/openrivian/tests/test_dependencies.py -v
 
   build_and_deploy_dev:
     name: Rebuild dev-test & Deploy dev
@@ -77,7 +78,8 @@ jobs:
 
       - name: Run Extensive Integration Tests on dev-test
         run: |
-          PYTHONPATH=. uv run python3 selfdrive/openrivian/tests/test_daemons.py
+          PYTHONPATH=. uv run python -m pytest selfdrive/openrivian/tests \
+            --ignore=selfdrive/openrivian/tests/test_dependencies.py -v
 
       - name: Push dev-test and fast-forward dev
         if: success()
