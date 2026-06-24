@@ -11,13 +11,15 @@ const write = (k, v) => { try { localStorage.setItem(k, v); } catch { /* noop */
 export function PrefsProvider({ children }) {
   const [units, setUnitsState] = useState(() => read('orv.units', 'imperial'));
   const [host, setHostState] = useState(() => read('orv.host', ''));
+  const [valhalla, setValhallaState] = useState(() => read('orv.valhalla', 'https://valhalla1.openstreetmap.de'));
 
   const setUnits = useCallback((u) => { write('orv.units', u); setUnitsState(u); }, []);
   const setHost = useCallback((h) => { write('orv.host', h); setHostState(h); }, []);
+  const setValhalla = useCallback((v) => { write('orv.valhalla', v); setValhallaState(v); }, []);
 
   const metric = units === 'metric';
   const api = {
-    units, setUnits, host, setHost,
+    units, setUnits, host, setHost, valhalla, setValhalla,
     speed: (mph) => (metric ? { v: (mph || 0) * 1.60934, u: 'km/h' } : { v: mph || 0, u: 'mph' }),
     temp: (c) => (metric ? { v: c, u: '°C' } : { v: (c || 0) * 9 / 5 + 32, u: '°F' }),
     dist: (mi) => (metric ? { v: (mi || 0) * 1.60934, u: 'km' } : { v: mi || 0, u: 'mi' }),

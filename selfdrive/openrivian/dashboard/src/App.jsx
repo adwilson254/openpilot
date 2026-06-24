@@ -49,8 +49,9 @@ function ConnBadge() {
 }
 
 function AppSettings({ onClose }) {
-  const { units, setUnits, host, setHost } = usePrefs();
+  const { units, setUnits, host, setHost, valhalla, setValhalla } = usePrefs();
   const [draft, setDraft] = useState(host);
+  const [vDraft, setVDraft] = useState(valhalla);
   const save = () => { setHost(draft.trim()); window.location.reload(); };
   return (
     <>
@@ -64,9 +65,14 @@ function AppSettings({ onClose }) {
           <button className="opt-btn sel" onClick={save}>Save</button>
         </div>
         <label className="label">Units</label>
-        <div className="row" style={{ marginTop: 6 }}>
+        <div className="row" style={{ margin: '6px 0 16px' }}>
           <button className={`opt-btn ${units === 'imperial' ? 'sel' : ''}`} onClick={() => setUnits('imperial')}>Imperial</button>
           <button className={`opt-btn ${units === 'metric' ? 'sel' : ''}`} onClick={() => setUnits('metric')}>Metric</button>
+        </div>
+        <label className="label">Valhalla routing endpoint</label>
+        <div className="row" style={{ marginTop: 6 }}>
+          <input className="sig-search" style={{ margin: 0 }} placeholder="https://valhalla1.openstreetmap.de"
+                 value={vDraft} onChange={(e) => setVDraft(e.target.value)} onBlur={() => setValhalla(vDraft.trim())} />
         </div>
       </div>
     </>
