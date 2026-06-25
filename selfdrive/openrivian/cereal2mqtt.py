@@ -26,6 +26,11 @@ MQTT_PORT = 1883
 PUBLISH_FREQ_HZ = 2.0  # Decimate high-freq CAN to 2 Hz for MQTT to avoid flooding
 SLEEP_DUR = 1.0 / PUBLISH_FREQ_HZ
 
+# Cereal services this bridge subscribes to. Module-level so the replay harness
+# can build a matching SubMaster without duplicating the list.
+SUBSCRIPTIONS = ['carState', 'deviceState', 'liveLocationKalman', 'pandaStates',
+                 'controlsState', 'radarState', 'managerState']
+
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         logging.info("[+] Connected to local MQTT broker!")
@@ -197,7 +202,7 @@ def main():
 
     # Set up SubMaster
     # Subscribing to high-value sockets
-    sm = messaging.SubMaster(['carState', 'deviceState', 'liveLocationKalman', 'pandaStates', 'controlsState', 'radarState', 'managerState'])
+    sm = messaging.SubMaster(SUBSCRIPTIONS)
 
     logging.info("[*] Subscribed to Cereal sockets. Entering publish loop...")
     while True:
