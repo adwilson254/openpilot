@@ -64,6 +64,10 @@ def only_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return not started
 
+# OpenRivian telemetry-stack gate (auto-on for Rivian, else honors OpenRivianEnabled).
+# Implemented in a dependency-free module so it can be unit-tested in isolation.
+from openpilot.selfdrive.openrivian.process_gating import openrivian_enabled
+
 def use_github_runner(started, params, CP: car.CarParams) -> bool:
   return not PC and params.get_bool("EnableGithubRunner") and (
     not params.get_bool("NetworkMetered") and not params.get_bool("GithubRunnerSufficientVoltage"))
@@ -183,11 +187,11 @@ procs += [
   NativeProcess("locationd_llk", "sunnypilot/selfdrive/locationd", ["./locationd"], only_onroad),
 
   # OpenRivian
-  PythonProcess("openriviand", "selfdrive.openrivian.api.openriviand", always_run),
-  PythonProcess("mqttd", "selfdrive.openrivian.mqttd", always_run),
-  PythonProcess("cereal2mqtt", "selfdrive.openrivian.cereal2mqtt", always_run),
-  PythonProcess("mqtt2params", "selfdrive.openrivian.mqtt2params", always_run),
-  PythonProcess("webd", "selfdrive.openrivian.webd", always_run),
+  PythonProcess("openriviand", "selfdrive.openrivian.api.openriviand", openrivian_enabled),
+  PythonProcess("mqttd", "selfdrive.openrivian.mqttd", openrivian_enabled),
+  PythonProcess("cereal2mqtt", "selfdrive.openrivian.cereal2mqtt", openrivian_enabled),
+  PythonProcess("mqtt2params", "selfdrive.openrivian.mqtt2params", openrivian_enabled),
+  PythonProcess("webd", "selfdrive.openrivian.webd", openrivian_enabled),
 ]
 
 if os.path.exists("./github_runner.sh"):

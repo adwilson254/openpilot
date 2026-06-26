@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Checkout OpenRivian (clean branch)
         uses: actions/checkout@v4
@@ -27,12 +28,28 @@ jobs:
           git remote add upstream https://github.com/adventurepilotdev/ap-dev.git
           git fetch upstream ap-dev
           
-      - name: Sync clean branch
+      - name: Sync clean branch (fast-forward, else open PR)
+        id: sync
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git checkout clean
-          git merge upstream/ap-dev --ff-only
-          
+          if git merge upstream/ap-dev --ff-only; then
+            echo "synced=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::clean cannot fast-forward to upstream/ap-dev (upstream diverged). Opening a sync PR instead of silently skipping."
+            BRANCH="sync/ap-dev-$(date +%Y%m%d)"
+            git branch -f "$BRANCH" upstream/ap-dev
+            git push -f origin "$BRANCH"
+            gh pr create --base clean --head "$BRANCH" \
+              --title "Nightly sync: ap-dev -> clean ($(date +%Y-%m-%d))" \
+              --body "Automated fast-forward sync failed because upstream/ap-dev diverged from clean. Review and merge this PR to bring clean current. dev-test injection/push was skipped for this run." \
+              || echo "A sync PR for this branch may already exist; leaving it in place."
+            echo "synced=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Inject into dev-test branch
+        if: steps.sync.outputs.synced == 'true'
         run: |
           # Checkout dev-test
           git checkout dev-test || git checkout -b dev-test
@@ -46,6 +63,7 @@ jobs:
           git diff --staged --quiet || git commit -m "[bot] Inject OpenRivian hooks"
 
       - name: Push branches
+        if: steps.sync.outputs.synced == 'true'
         run: |
           git push origin clean
           git push origin dev-test
