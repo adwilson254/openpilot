@@ -26,9 +26,11 @@ jobs:
         run: uv sync --all-extras --dev
       - name: Run OpenRivian Daemon Tests
         run: |
-          PYTHONPATH=. uv run python -m pytest selfdrive/openrivian/tests \
+          PYTHONPATH=. uv run coverage run --source=selfdrive/openrivian -m pytest selfdrive/openrivian/tests \
             --ignore=selfdrive/openrivian/tests/test_dependencies.py \
             --confcutdir=selfdrive/openrivian/tests -o addopts="" -p no:cacheprovider -v
+      - name: Coverage report (informational)
+        run: PYTHONPATH=. uv run coverage report -m || true
 
   build_and_deploy_dev:
     name: Rebuild dev-test & Deploy dev
@@ -79,9 +81,11 @@ jobs:
 
       - name: Run Extensive Integration Tests on dev-test
         run: |
-          PYTHONPATH=. uv run python -m pytest selfdrive/openrivian/tests \
+          PYTHONPATH=. uv run coverage run --source=selfdrive/openrivian -m pytest selfdrive/openrivian/tests \
             --ignore=selfdrive/openrivian/tests/test_dependencies.py \
             --confcutdir=selfdrive/openrivian/tests -o addopts="" -p no:cacheprovider -v
+      - name: Coverage report (informational)
+        run: PYTHONPATH=. uv run coverage report -m || true
 
       - name: Push dev-test and fast-forward dev
         if: success()

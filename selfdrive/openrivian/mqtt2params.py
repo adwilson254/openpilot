@@ -1,8 +1,17 @@
 #!/usr/bin/env python3
+import os
+try:
+    os.nice(19)
+except Exception:
+    pass
+
 import time
 import json
 import logging
-import paho.mqtt.client as mqtt
+try:
+    import paho.mqtt.client as mqtt
+except ImportError:
+    mqtt = None
 
 import os
 import sys
@@ -95,16 +104,23 @@ def publish_all_params(client):
             client.publish(f"openrivian/settings/status/{param}", json.dumps({"value": val}, default=str), retain=True)
             last_published_values[param] = val
 
+def build_client():
+    # Be explicit about the callback API version. paho-mqtt 2.x still defaults to
+    # VERSION1 but emits a DeprecationWarning on every start (noisy in device logs),
+    # and a future paho 3.x may drop the implicit default entirely. Passing it
+    # explicitly keeps our VERSION1-style callbacks valid and future-proof.
+    return mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
+
 def main():
-    try:
-        os.nice(19)
-    except Exception as e:
-        logging.warning(f"Failed to set nice value: {e}")
 
     logging.basicConfig(level=logging.INFO)
     logging.info("[*] Starting Settings Sync Bridge...")
 
-    client = mqtt.Client()
+    if mqtt is None:
+        logging.error("Missing paho-mqtt. Gracefully exiting mqtt2params.")
+        return
+
+    client = build_client()
     client.on_connect = on_connect
     client.on_message = on_message
     
