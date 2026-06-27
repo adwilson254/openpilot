@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+import os
+try:
+    os.nice(19)
+except Exception:
+    pass
+
 import time
 import os
 from openpilot.common.swaglog import cloudlog
