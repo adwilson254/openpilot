@@ -24,14 +24,67 @@ MQTT_PORT = 1883
 
 params = Params()
 
-PARAMS_META_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../sunnypilot/sunnylink/params_metadata.json"))
-try:
-    with open(PARAMS_META_PATH, "r") as f:
-        metadata = json.load(f)
-        PARAMS_WHITELIST = list(metadata.keys())
-except Exception as e:
-    logging.error(f"Failed to load params metadata: {e}")
-    PARAMS_WHITELIST = []
+_HERE = os.path.dirname(__file__)
+PARAMS_META_PATH = os.path.abspath(os.path.join(_HERE, "../../sunnypilot/sunnylink/params_metadata.json"))
+SETTINGS_UI_PATH = os.path.abspath(os.path.join(_HERE, "dashboard/src/assets/settings_ui.json"))
+
+# Hard safety denylist: params that must NEVER be writable over MQTT, regardless of
+# what the UI schema or metadata contains. These are persistent state/blobs in
+# /data/params that, if overwritten with the wrong value/type, corrupt calibration,
+# the model, driver monitoring, or device identity -- and that corruption survives
+# branch switches and reboots. (A too-broad whitelist here previously allowed e.g.
+# CalibrationParams to be set, which can brick engagement with a "take over" alert.)
+DENY_EXACT = {
+    "CalibrationParams", "LiveCalibration", "LiveParameters", "LiveTorqueParameters",
+    "LiveDelay", "ControlsReady", "FirmwareQueryDone", "CompletedTrainingVersion",
+    "HasAcceptedTerms", "DongleId", "HardwareSerial", "IsOnroad", "IsOffroad",
+    "ObdMultiplexingEnabled", "ObdMultiplexingChanged", "AlwaysOnDM",
+}
+DENY_PREFIX = ("Offroad_", "ModelManager_", "ModelRunnerType", "Live", "CarParams", "Calibration", "Camera")
+
+
+def _is_safe_to_write(key):
+    return key not in DENY_EXACT and not key.startswith(DENY_PREFIX)
+
+
+def _ui_exposed_keys(path):
+    """Keys the dashboard settings UI actually exposes (settings_ui.json)."""
+    keys = set()
+
+    def walk(o):
+        if isinstance(o, dict):
+            k = o.get("key")
+            if isinstance(k, str):
+                keys.add(k)
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+
+    with open(path, "r") as f:
+        walk(json.load(f))
+    return keys
+
+
+def _build_whitelist():
+    try:
+        with open(PARAMS_META_PATH, "r") as f:
+            known = set(json.load(f).keys())
+    except Exception as e:
+        logging.error(f"Failed to load params metadata: {e}")
+        return []
+    # Only allow params the dashboard UI actually offers; fall back to all known
+    # params if the UI schema is unavailable. Either way, strip the safety denylist.
+    try:
+        allowed = _ui_exposed_keys(SETTINGS_UI_PATH) & known
+    except Exception as e:
+        logging.warning(f"settings_ui.json unavailable ({e}); restricting to denylist-filtered metadata")
+        allowed = known
+    return sorted(k for k in allowed if _is_safe_to_write(k))
+
+
+PARAMS_WHITELIST = _build_whitelist()
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
@@ -47,8 +100,8 @@ def on_message(client, userdata, msg):
         param_name = msg.topic.split("/")[-1]
         
         # Only allow setting whitelisted params to prevent dangerous overwrites
-        if param_name not in PARAMS_WHITELIST:
-            logging.warning(f"Attempted to set non-whitelisted param: {param_name}")
+        if param_name not in PARAMS_WHITELIST or not _is_safe_to_write(param_name):
+            logging.warning(f"Attempted to set non-whitelisted/protected param: {param_name}")
             return
             
         payload = json.loads(msg.payload.decode())
