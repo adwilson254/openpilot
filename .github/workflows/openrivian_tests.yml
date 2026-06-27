@@ -103,9 +103,10 @@ jobs:
     environment: dev
     if: success() && github.ref != 'refs/heads/can-decode' && github.ref != 'refs/heads/can-debug' && github.ref != 'refs/heads/dev-test' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/dev-pre' && github.ref != 'refs/heads/clean' && github.event_name == 'push'
     steps:
-      - name: Checkout
+      - name: Checkout dev-test
         uses: actions/checkout@v4
         with:
+          ref: dev-test
           fetch-depth: 0
 
       - name: Setup Git User
@@ -113,11 +114,28 @@ jobs:
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-      - name: Promote dev-test to dev
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Strip simulator + rebuild dashboard (production has no simulator)
+        working-directory: selfdrive/openrivian/dashboard
         run: |
-          git fetch origin
-          echo "Approved. Promoting dev-test to dev (Release Candidate)."
-          git push origin origin/dev-test:dev --force
+          bash scripts/strip_sim.sh
+          npm ci
+          npm run build
+
+      - name: Promote stripped build to dev
+        run: |
+          # Commit the simulator removal + rebuilt bundle on top of dev-test, then push
+          # to dev. dev-test keeps the simulator (for testing); dev never has it.
+          # Stage only src + the app bundle/index (never the LFS-managed dist svgs).
+          git add -A selfdrive/openrivian/dashboard/src selfdrive/openrivian/dashboard/scripts
+          git add selfdrive/openrivian/dashboard/dist/assets selfdrive/openrivian/dashboard/dist/index.html
+          git commit -m "[promote] strip simulator for production dev" || echo "nothing to strip"
+          echo "Approved. Promoting to dev (Release Candidate)."
+          git push origin HEAD:dev --force
 
       - name: dev-pre guidance
         run: |
