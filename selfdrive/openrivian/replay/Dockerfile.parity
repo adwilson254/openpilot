@@ -42,6 +42,11 @@ COPY selfdrive/openrivian/cereal2mqtt.py /work/selfdrive/openrivian/cereal2mqtt.
 COPY selfdrive/openrivian/mqtt2params.py /work/selfdrive/openrivian/mqtt2params.py
 COPY selfdrive/openrivian/mqttd.py /work/selfdrive/openrivian/mqttd.py
 COPY selfdrive/openrivian/webd.py /work/selfdrive/openrivian/webd.py
+COPY selfdrive/openrivian/process_gating.py /work/selfdrive/openrivian/process_gating.py
+# Whitelist inputs read by mqtt2params at import (tracked files; needed so the
+# real-param test computes a non-empty whitelist).
+COPY selfdrive/openrivian/dashboard/src/assets/settings_ui.json /work/selfdrive/openrivian/dashboard/src/assets/settings_ui.json
+COPY sunnypilot/sunnylink/params_metadata.json /work/sunnypilot/sunnylink/params_metadata.json
 COPY selfdrive/openrivian/api /work/selfdrive/openrivian/api
 COPY selfdrive/openrivian/scripts /work/selfdrive/openrivian/scripts
 COPY selfdrive/openrivian/tests /work/selfdrive/openrivian/tests

@@ -27,4 +27,21 @@ echo "[*] Building $IMAGE (linux/arm64)..."
   -t "$IMAGE" .
 
 echo "[*] Running suite in container..."
-"$CONTAINER_CLI" run --rm --platform linux/arm64 "$IMAGE"
+
+# Mount real device data captured from the comma (params store + recorded route) if
+# present, so the suite can exercise the daemons against genuine state. Stored outside
+# the repo under "Kiro Artifacts/comma_data" (override with ORV_DATA_DIR). When mounted,
+# ORV_PARAMS_DIR enables test_mqtt2params_realparams.py and ORV_TEST_ROUTE the real-route
+# test (the latter still needs a cereal-capable image; it skips in this lightweight one).
+ORV_DATA_DIR="${ORV_DATA_DIR:-$ROOT/../Kiro Artifacts/comma_data}"
+MOUNTS=()
+ENVS=()
+if [ -d "$ORV_DATA_DIR/params/d" ]; then
+  echo "    + mounting real params from: $ORV_DATA_DIR/params/d"
+  MOUNTS+=(-v "$ORV_DATA_DIR/params/d:/mnt/params:ro")
+  ENVS+=(-e ORV_PARAMS_DIR=/mnt/params)
+else
+  echo "    (no real data at $ORV_DATA_DIR/params/d -- real-data tests will skip)"
+fi
+
+"$CONTAINER_CLI" run --rm --platform linux/arm64 "${MOUNTS[@]}" "${ENVS[@]}" "$IMAGE"
