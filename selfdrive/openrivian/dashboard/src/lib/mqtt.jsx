@@ -5,7 +5,7 @@
 /* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
 import Paho from 'paho-mqtt';
-import { simEnabled, simSnapshot } from './sim';
+import { simEnabled, simSnapshot, loadSimTimeline } from './sim';
 
 const TelemetryContext = createContext(null);
 
@@ -27,27 +27,34 @@ export function TelemetryProvider({ children }) {
   const clientRef = useRef(null);
 
   useEffect(() => {
-    // Demo mode: feed synthetic values into the same store (no broker needed).
+    // Demo mode: REPLAY the recorded real drive into the same store (no broker).
+    // This branch never opens an MQTT connection, so simulated data (including the
+    // synthetic engaged state) can never reach or engage a real vehicle.
     if (simEnabled()) {
-      const t0 = Date.now();
-      const tick = () => {
-        const t = (Date.now() - t0) / 1000;
-        const snap = simSnapshot(t);
-        const ts = Date.now();
-        const next = {};
-        for (const [topic, value] of Object.entries(snap)) {
-          next[topic] = { value, ts };
-          if (typeof value === 'number') {
-            const h = histRef.current[topic] || (histRef.current[topic] = []);
-            h.push(value);
-            if (h.length > HISTORY_LEN) h.shift();
+      let cancelled = false;
+      let id = null;
+      loadSimTimeline().then((tl) => {
+        if (cancelled) return;
+        const t0 = Date.now();
+        const tick = () => {
+          const t = (Date.now() - t0) / 1000;
+          const snap = simSnapshot(tl, t);
+          const ts = Date.now();
+          const next = {};
+          for (const [topic, value] of Object.entries(snap)) {
+            next[topic] = { value, ts };
+            if (typeof value === 'number') {
+              const h = histRef.current[topic] || (histRef.current[topic] = []);
+              h.push(value);
+              if (h.length > HISTORY_LEN) h.shift();
+            }
           }
-        }
-        setSignals((prev) => ({ ...prev, ...next }));
-      };
-      tick();
-      const id = setInterval(tick, 200); // 5 Hz
-      return () => clearInterval(id);
+          setSignals((prev) => ({ ...prev, ...next }));
+        };
+        tick();
+        id = setInterval(tick, 1000 / (tl.hz || 5));
+      });
+      return () => { cancelled = true; if (id) clearInterval(id); };
     }
 
     let active = true;
@@ -91,6 +98,9 @@ export function TelemetryProvider({ children }) {
   }, []);
 
   const publish = useCallback((topic, obj) => {
+    // Hard safety guard: in demo/sim mode we never emit to a broker, so a simulated
+    // engaged state or a settings toggle can never reach a real vehicle.
+    if (simEnabled()) return false;
     const c = clientRef.current;
     if (!c || !c.isConnected()) return false;
     const m = new Paho.Message(JSON.stringify(obj));
