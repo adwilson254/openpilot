@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#000000" />
+  <title>OpenRivian HUD</title>
+  <link rel="stylesheet" href="hud.css" />
+</head>
+<body>
+  <div id="viewport">
+    <!-- 2160x1080 design canvas (comma 3X), uniformly scaled to fit any screen -->
+    <div id="stage">
+      <div id="road"></div>
+      <div id="border"></div>
+
+      <div id="setSpeed">
+        <div id="setMax">MAX</div>
+        <div id="setVal">&ndash;</div>
+      </div>
+
+      <div id="speed">
+        <div id="speedNum">0</div>
+        <div id="speedUnit">mph</div>
+      </div>
+
+      <div id="blinkL" class="blinker">&#9664;</div>
+      <div id="blinkR" class="blinker">&#9654;</div>
+
+      <button id="expbtn" title="Experimental mode" aria-label="Toggle experimental mode">
+        <svg viewBox="0 0 100 100" width="120" height="120" aria-hidden="true">
+          <circle cx="50" cy="50" r="42" fill="none" stroke="currentColor" stroke-width="7" />
+          <circle cx="50" cy="50" r="9" fill="currentColor" />
+          <line x1="50" y1="50" x2="50" y2="12" stroke="currentColor" stroke-width="7" />
+          <line x1="50" y1="50" x2="84" y2="68" stroke="currentColor" stroke-width="7" />
+          <line x1="50" y1="50" x2="16" y2="68" stroke="currentColor" stroke-width="7" />
+        </svg>
+      </button>
+
+      <div id="alert" class="hidden">
+        <div id="alertText1"></div>
+        <div id="alertText2"></div>
+      </div>
+    </div>
+
+    <div id="hudbar">
+      <span id="conn" class="bad">connecting&hellip;</span>
+      <span id="src"></span>
+      <button id="gear" aria-label="Settings">&#9881;</button>
+    </div>
+
+    <div id="settings" class="hidden">
+      <div class="panel">
+        <h2>Parameters</h2>
+        <div id="paramList"></div>
+        <button id="closeSettings">Close</button>
+      </div>
+    </div>
+  </div>
+  <script src="hud.js"></script>
+</body>
+</html>
