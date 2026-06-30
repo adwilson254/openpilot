@@ -41,6 +41,7 @@ html, body {
 #road { position: absolute; inset: 0; }
 
 #overlay { position: absolute; left: 0; top: 0; width: 2160px; height: 1080px; pointer-events: none; }
+#camera { position: absolute; left: 0; top: 0; width: 2160px; height: 1080px; pointer-events: none; }
 
 #border {
   position: absolute;

@@ -29,10 +29,12 @@ class HudServer:
 
         self.app = web.Application()
         self.app.router.add_get("/ws/state", self._ws_handler)
+        self.app.router.add_get("/ws/video", self._ws_video_handler)
         self.app.router.add_get("/", self._index)
         self.app.router.add_get("/{path:.*}", self._static)
         self.app.on_startup.append(self._start_producers)
         self.app.on_cleanup.append(self._stop_producers)
+        self.video_clients: set = set()
 
     # ---- producers (background state sources) ----
     def add_producer(self, coro_factory):
@@ -93,6 +95,28 @@ class HudServer:
             return
         if self.on_command is not None:
             await self.on_command(cmd, self, ws)
+
+    # ---- video websocket (binary HEVC frames; fed only on-device) ----
+    async def _ws_video_handler(self, request):
+        ws = web.WebSocketResponse(heartbeat=20.0, max_msg_size=8 * 1024 * 1024)
+        await ws.prepare(request)
+        self.video_clients.add(ws)
+        try:
+            async for _msg in ws:  # client doesn't send; just keep the socket open
+                pass
+        finally:
+            self.video_clients.discard(ws)
+        return ws
+
+    async def broadcast_video(self, payload: bytes):
+        dead = []
+        for ws in self.video_clients:
+            try:
+                await ws.send_bytes(payload)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.video_clients.discard(ws)
 
     # ---- broadcast ----
     async def broadcast(self, message: dict):

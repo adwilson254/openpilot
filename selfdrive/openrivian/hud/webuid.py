@@ -24,6 +24,7 @@ from server import HudServer                # noqa: E402
 from params_bridge import ParamsBridge      # noqa: E402
 from commands import make_command_handler   # noqa: E402
 from model_state import build_model_state    # noqa: E402
+from video import make_video_producer        # noqa: E402
 
 WEB_DIR = os.path.join(_HERE, "web")
 
@@ -67,6 +68,7 @@ def main():
     params_bridge = ParamsBridge()
     server = HudServer(WEB_DIR, on_command=make_command_handler(params_bridge, builder))
     server.add_producer(_make_producer(builder))
+    server.add_producer(make_video_producer(os.environ.get("HUD_CAM", "road")))
 
     port = int(os.environ.get("HUD_PORT", "8200"))
     print(f"[webuid] OpenRivian HUD serving on :{port}")

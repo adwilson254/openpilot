@@ -136,5 +136,35 @@ window.Projection = (function () {
     return left.concat(right.reverse());
   }
 
-  return { calcTransform, project, pathLenIdx, mapLine, euler2rot, mul, vec, SENSORS, VIEW_FROM_DEVICE };
+  // Camera-image display transform (camera pixels -> screen), matching the
+  // model overlay so video and path align. Returns {zoom, tx, ty} for an affine
+  // ctx.setTransform(zoom,0,0,zoom,tx,ty). Mirrors calcTransform's video_transform.
+  function videoTransform(model, W, H, X, Y) {
+    const s = SENSORS[model.sensor] || SENSORS[DEFAULT_SENSOR];
+    const isWide = model.stream === "wide";
+    const fl = isWide ? s.ecamFl : s.fl;
+    const cx = s.cx, cy = s.cy;
+    const deviceFromCalib = euler2rot(model.rpy);
+    let viewFromCalib;
+    if (isWide) {
+      viewFromCalib = mul(mul(VIEW_FROM_DEVICE, euler2rot(model.wideFromDeviceEuler || [0, 0, 0])), deviceFromCalib);
+    } else {
+      viewFromCalib = mul(VIEW_FROM_DEVICE, deviceFromCalib);
+    }
+    const margin = 5;
+    const coverZoom = Math.max((W / 2 + margin) / cx, (H / 2 + margin) / cy);
+    const zoom = isWide ? Math.max(2.0, coverZoom) : coverZoom;
+    const calibTransform = mul([[fl, 0, cx], [0, fl, cy], [0, 0, 1]], viewFromCalib);
+    const kep = vec(calibTransform, [1000.0, 0.0, 0.0]);
+    const maxXOff = cx * zoom - W / 2 - margin;
+    const maxYOff = cy * zoom - H / 2 - margin;
+    let xOff = 0, yOff = 0;
+    if (Math.abs(kep[2]) > 1e-6) {
+      xOff = clamp((kep[0] / kep[2] - cx) * zoom, -maxXOff, maxXOff);
+      yOff = clamp((kep[1] / kep[2] - cy) * zoom, -maxYOff, maxYOff);
+    }
+    return { zoom: zoom, tx: (W / 2 + X - xOff) - cx * zoom, ty: (H / 2 + Y - yOff) - cy * zoom };
+  }
+
+  return { calcTransform, videoTransform, project, pathLenIdx, mapLine, euler2rot, mul, vec, SENSORS, VIEW_FROM_DEVICE };
 })();
