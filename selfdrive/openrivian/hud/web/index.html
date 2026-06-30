@@ -14,6 +14,7 @@
     <!-- 2160x1080 design canvas (comma 3X), uniformly scaled to fit any screen -->
     <div id="stage">
       <div id="road"></div>
+      <canvas id="overlay" width="2160" height="1080"></canvas>
       <div id="border"></div>
 
       <div id="setSpeed">
@@ -59,6 +60,8 @@
       </div>
     </div>
   </div>
+  <script src="projection.js"></script>
+  <script src="model.js"></script>
   <script src="hud.js"></script>
 </body>
 </html>

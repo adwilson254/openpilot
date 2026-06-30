@@ -30,14 +30,16 @@ from hud_state import HudStateBuilder       # noqa: E402
 from server import HudServer                # noqa: E402
 from params_bridge import ParamsBridge      # noqa: E402
 from commands import make_command_handler   # noqa: E402
+from model_state import build_model_state    # noqa: E402
 
 WEB_DIR = os.path.join(_HERE, "web")
 DEFAULT_RLOG = os.path.join(_WORKSPACE, "Kiro Artifacts", "replay_data",
                             "0000000c--a4cff55fe7--0", "rlog.zst")
 
-# services the HUD cares about (Phase 1 subset)
+# services the HUD cares about (Phase 1 chrome + Phase 2 model overlay)
 RELEVANT = {"carState", "selfdriveState", "controlsState", "deviceState",
-            "carParams", "modelV2", "radarState", "liveCalibration"}
+            "carParams", "modelV2", "radarState", "liveCalibration",
+            "roadCameraState", "longitudinalPlan"}
 
 
 def _decompress(path: str) -> bytes:
@@ -75,6 +77,9 @@ def _make_producer(data: bytes, builder: HudStateBuilder, loop_playback: bool, r
                     state = builder.build(latest)
                     state["source"] = "replay"
                     await server.broadcast(state)
+                    model = build_model_state(latest)
+                    if model is not None:
+                        await server.broadcast(model)
                     last_emit_ns = mono
 
             if not loop_playback:

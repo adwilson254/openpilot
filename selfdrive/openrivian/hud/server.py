@@ -23,7 +23,7 @@ class HudServer:
         self.web_dir = os.path.abspath(web_dir)
         self.on_command = on_command  # async fn(cmd: dict, server: HudServer, ws) -> None
         self.clients: set = set()
-        self._latest_state: str | None = None
+        self._latest: dict = {}  # message type -> last JSON string (so new clients sync immediately)
         self._producers: list = []
         self._tasks: list = []
 
@@ -75,8 +75,8 @@ class HudServer:
         await ws.prepare(request)
         self.clients.add(ws)
         try:
-            if self._latest_state is not None:
-                await ws.send_str(self._latest_state)
+            for data in self._latest.values():
+                await ws.send_str(data)
             async for msg in ws:
                 if msg.type == WSMsgType.TEXT:
                     await self._handle_command(msg.data, ws)
@@ -97,8 +97,9 @@ class HudServer:
     # ---- broadcast ----
     async def broadcast(self, message: dict):
         data = json.dumps(message)
-        if message.get("type") == "state":
-            self._latest_state = data
+        mtype = message.get("type")
+        if mtype:
+            self._latest[mtype] = data
         dead = []
         for ws in self.clients:
             try:

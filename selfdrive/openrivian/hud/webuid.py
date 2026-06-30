@@ -23,12 +23,14 @@ from hud_state import HudStateBuilder       # noqa: E402
 from server import HudServer                # noqa: E402
 from params_bridge import ParamsBridge      # noqa: E402
 from commands import make_command_handler   # noqa: E402
+from model_state import build_model_state    # noqa: E402
 
 WEB_DIR = os.path.join(_HERE, "web")
 
-# Phase 1 subset of services consumed by the HUD.
+# Services consumed by the HUD (chrome + model overlay).
 SERVICES = ["carState", "selfdriveState", "controlsState", "deviceState",
-            "carParams", "modelV2", "radarState", "liveCalibration"]
+            "carParams", "modelV2", "radarState", "liveCalibration",
+            "roadCameraState", "longitudinalPlan"]
 
 
 def _make_producer(builder: HudStateBuilder, rate_hz: float = 20.0):
@@ -40,6 +42,9 @@ def _make_producer(builder: HudStateBuilder, rate_hz: float = 20.0):
             sm.update(0)
             msgs = {s: sm[s] for s in SERVICES if sm.seen[s]}
             await server.broadcast(builder.build(msgs))
+            model = build_model_state(msgs)
+            if model is not None:
+                await server.broadcast(model)
             await asyncio.sleep(dt)
 
     return producer

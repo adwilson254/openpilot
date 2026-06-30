@@ -16,6 +16,9 @@
   if (window.visualViewport) window.visualViewport.addEventListener("resize", fit);
   fit();
 
+  // model/path overlay canvas
+  HUDModel.init(el("overlay"));
+
   const conn = el("conn");
   const src = el("src");
 
@@ -88,6 +91,7 @@
       let m;
       try { m = JSON.parse(ev.data); } catch (e) { return; }
       if (m.type === "state") updateHud(m);
+      else if (m.type === "model") HUDModel.onModel(m);
       else if (m.type === "params") renderParams(m.items);
       else if (m.type === "param") updateParam(m.key, m.value);
     };
