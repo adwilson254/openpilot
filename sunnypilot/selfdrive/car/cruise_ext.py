@@ -89,16 +89,6 @@ class VCruiseHelperSP:
       self.v_cruise_min = V_CRUISE_MIN
       return
 
-    # OpenRivian "crawl": with openpilot longitudinal control active, allow the ACC
-    # set speed to be dialed down to the model floor (V_CRUISE_MIN, ~5 mph) so it can
-    # crawl through construction zones once engaged. The ~20 mph limit is only the
-    # stock ACC *engage* threshold; once engaged, op-long already retains control and
-    # brakes/holds smoothly below it (validated on route 00000034: engaged down to
-    # 5.4 mph with controls_allowed the whole time). Other cars keep the normal floor.
-    if self.CP.brand == "rivian" and self.CP.openpilotLongitudinalControl:
-      self.v_cruise_min = V_CRUISE_MIN
-      return
-
     self.v_cruise_min = get_minimum_set_speed(is_metric)
 
   def update_enabled_state(self, CS: car.CarState, enabled: bool) -> bool:
