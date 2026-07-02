@@ -160,7 +160,7 @@ procs = [
 
   # debug procs
   NativeProcess("bridge", "cereal/messaging", ["./bridge"], notcar),
-  PythonProcess("webrtcd", "system.webrtc.webrtcd", always_run),
+  PythonProcess("webrtcd", "system.webrtc.webrtcd", notcar),  # OpenRivian: keep webrtcd OFF onroad (WebRTC is heavy). OpenRivian telemetry daemons below stay always_run for onroad MQTT.
   PythonProcess("webjoystick", "tools.bodyteleop.web", notcar),
   PythonProcess("joystick", "tools.joystick.joystick_control", and_(joystick, iscar)),
 
