@@ -1,0 +1,4 @@
+# OpenRivian logo lives in an upstream dir but is fork-local and not on sunnypilot's
+# LFS remote. Keep just this file out of LFS (other assets here still follow the
+# root *.png filter=lfs rule). Prevents "should have been pointers" churn on switch.
+openrivian_logo.png -filter -diff -merge -text
