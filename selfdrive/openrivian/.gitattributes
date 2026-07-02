@@ -1,0 +1,9 @@
+# OpenRivian's own UI assets are small and fork-local. The repo's LFS remote is
+# sunnypilot's (no push access for this fork), so these were committed as normal
+# git objects rather than LFS pointers. Keep them OUT of LFS here so git-lfs does
+# not flag them "should have been pointers, but weren't" and churn on branch switch.
+# (Nested .gitattributes overrides the root *.png/*.svg/*.gif filter=lfs rules for
+# everything under selfdrive/openrivian/.)
+*.svg -filter -diff -merge -text
+*.png -filter -diff -merge -text
+*.gif -filter -diff -merge -text
