@@ -1,260 +1,144 @@
 import { useState, useEffect } from 'react';
-import Paho from 'paho-mqtt';
-import './App.css';
-import settingsUISchema from './assets/settings_ui.json';
-import paramsMetadata from './assets/params_metadata.json';
-import Telemetry from './Telemetry';
-import DriveHistory from './DriveHistory';
-import Controls from './Controls';
-import DesignShowcase from './DesignShowcase';
+import './theme.css';
+import { useTelemetry } from './lib/mqtt';
+import { usePrefs } from './lib/prefs';
+import Alerts from './components/Alerts';
+import Drive from './views/Drive';
+import Vehicle from './views/Vehicle';
+import Energy from './views/Energy';
+import Camp from './views/Camp';
+import Adas from './views/Adas';
+import Location from './views/Location';
+import Device from './views/Device';
+import Drives from './views/Drives';
+import Signals from './views/Signals';
+import Settings from './views/Settings';
 
-function renderItem(item, settings, onUpdateSetting) {
-  const meta = paramsMetadata[item.key] || {};
-  const value = settings[item.key];
+const TABS = [
+  { id: 'drive', label: 'Drive', icon: '🚙', view: Drive },
+  { id: 'vehicle', label: 'Vehicle', icon: '🛞', view: Vehicle },
+  { id: 'energy', label: 'Energy', icon: '⚡', view: Energy },
+  { id: 'camp', label: 'Camp', icon: '🔥', view: Camp },
+  { id: 'adas', label: 'ADAS', icon: '🛰️', view: Adas },
+  { id: 'map', label: 'Map', icon: '📍', view: Location },
+  { id: 'device', label: 'Device', icon: '🖥️', view: Device },
+  { id: 'drives', label: 'Drives', icon: '🛣️', view: Drives },
+  { id: 'signals', label: 'Signals', icon: '📈', view: Signals },
+  { id: 'settings', label: 'Settings', icon: '⚙️', view: Settings },
+];
 
-  if (item.widget === 'toggle') {
-    return (
-      <div key={item.key} className="setting-row">
-        <div style={{ paddingRight: '1rem' }}>
-          <div className="setting-title">{item.title}</div>
-          <div className="setting-desc">{item.description}</div>
-        </div>
-        <button 
-          className="cel-button"
-          onClick={() => onUpdateSetting(item.key, !value)}
-          style={{
-            background: value ? '#00D582' : '#333',
-            color: '#FFF',
-            minWidth: '80px',
-          }}
-        >
-          {value ? "ON" : "OFF"}
-        </button>
-      </div>
-    );
-  }
-  else if (item.widget === 'option' || item.widget === 'multiple_button') {
-    const options = item.options || meta.options || [];
-    if (options.length === 0) return null;
-    return (
-      <div key={item.key} className="setting-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
-        <div>
-          <div className="setting-title">{item.title}</div>
-          <div className="setting-desc">{item.description}</div>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
-          {options.map(opt => (
-            <button
-              key={opt.value}
-              className="cel-button"
-              onClick={() => onUpdateSetting(item.key, opt.value)}
-              style={{
-                background: value === opt.value ? '#FFD500' : '#FFF',
-                color: '#1A1A1A',
-              }}
-            >
-              {opt.label || opt.value}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-  return null;
+const TAB_IDS = TABS.map((t) => t.id);
+
+function initialTab() {
+  const h = window.location.hash.replace('#', '');
+  if (TAB_IDS.includes(h)) return h;
+  try { const s = localStorage.getItem('orv.tab'); if (TAB_IDS.includes(s)) return s; } catch { /* noop */ }
+  return 'drive';
 }
 
-function SettingsView({ activePanelId, setActivePanelId, settings, onUpdateSetting }) {
-  const panels = settingsUISchema.panels || [];
-  
-  const currentPanel = panels.find(p => p.id === activePanelId);
-
+function ConnBadge() {
+  const { status } = useTelemetry();
+  if (status === 'sim') return <span className="badge"><span className="dot" style={{ background: 'var(--yellow)' }} /> Simulated</span>;
+  const live = status === 'live';
   return (
-    <div className="app-layout">
-      {/* Sidebar Navigation */}
-      <div className="app-sidebar">
-        {panels.map(panel => (
-          <div 
-            key={panel.id}
-            className={`nav-item ${activePanelId === panel.id ? 'active' : ''}`}
-            onClick={() => setActivePanelId(panel.id)}
-          >
-            {panel.label}
-          </div>
-        ))}
-      </div>
-
-      {/* Main Settings Content */}
-      <div className="app-main">
-        <div className="app-content">
-          {!currentPanel ? <div>Select a category</div> : (
-            <>
-              <div className="cel-card" style={{ width: '100%', marginBottom: '2rem' }}>
-                <h1 style={{ margin: 0, fontWeight: 900 }}>{currentPanel.label}</h1>
-                {currentPanel.description && <p style={{ color: '#666', marginTop: '0.5rem' }}>{currentPanel.description}</p>}
-              </div>
-              
-              <div className="cel-card" style={{ width: '100%', padding: '2rem' }}>
-                {currentPanel.sections?.map(section => (
-                  <div key={section.id} style={{ marginBottom: '2rem' }}>
-                    {section.title && <h2 style={{ borderBottom: '2px solid #1A1A1A', paddingBottom: '0.5rem', marginBottom: '1rem' }}>{section.title}</h2>}
-                    {section.items?.map(item => {
-                      if (item.key) return renderItem(item, settings, onUpdateSetting);
-                      return null;
-                    })}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    <span className="badge">
+      <span className={`dot ${live ? 'live' : 'off'}`} />
+      {live ? 'Live' : status === 'connecting' ? 'Connecting…' : 'Offline'}
+    </span>
   );
 }
 
-function App() {
-  const [telemetry, setTelemetry] = useState({ speed: 0, battery: 0, gear: 'P', cpuTemp: 0 });
-  const [settings, setSettings] = useState({});
-  const [mqttClient, setMqttClient] = useState(null);
-  
-  // Tab Routing: "telemetry", "settings", "history", "controls", "showcase"
-  const [activeTab, setActiveTab] = useState("telemetry");
-  const [activePanelId, setActivePanelId] = useState("steering");
+function AppSettings({ onClose }) {
+  const { units, setUnits, host, setHost, valhalla, setValhalla } = usePrefs();
+  const [draft, setDraft] = useState(host);
+  const [vDraft, setVDraft] = useState(valhalla);
+  const save = () => { setHost(draft.trim()); window.location.reload(); };
+  return (
+    <>
+      <div className="app-settings-backdrop" onClick={onClose} />
+      <div className="app-settings card">
+        <div className="setting-title" style={{ marginBottom: 10 }}>App Settings</div>
+        <label className="label">Comma host / IP</label>
+        <div className="row" style={{ margin: '6px 0 16px' }}>
+          <input className="sig-search" style={{ margin: 0 }} placeholder={window.location.hostname}
+                 value={draft} onChange={(e) => setDraft(e.target.value)} />
+          <button className="opt-btn sel" onClick={save}>Save</button>
+        </div>
+        <label className="label">Units</label>
+        <div className="row" style={{ margin: '6px 0 16px' }}>
+          <button className={`opt-btn ${units === 'imperial' ? 'sel' : ''}`} onClick={() => setUnits('imperial')}>Imperial</button>
+          <button className={`opt-btn ${units === 'metric' ? 'sel' : ''}`} onClick={() => setUnits('metric')}>Metric</button>
+        </div>
+        <label className="label">Valhalla routing endpoint</label>
+        <div className="row" style={{ marginTop: 6 }}>
+          <input className="sig-search" style={{ margin: 0 }} placeholder="https://valhalla1.openstreetmap.de"
+                 value={vDraft} onChange={(e) => setVDraft(e.target.value)} onBlur={() => setValhalla(vDraft.trim())} />
+        </div>
+      </div>
+    </>
+  );
+}
 
-  useEffect(() => {
-    // Check URL params first (e.g. ?host=192.168.2.232), then fallback to truck IP if localhost
-    const urlParams = new URLSearchParams(window.location.search);
-    const hostParam = urlParams.get('host');
-    const host = hostParam ? hostParam : (window.location.hostname === 'localhost' ? '192.168.0.233' : window.location.hostname);
-    
-    const client = new Paho.Client(host, Number(9001), "clientId-" + Math.random().toString(16).substr(2, 8));
+export default function App() {
+  const [tab, setTabState] = useState(initialTab);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const current = TABS.find((t) => t.id === tab) || TABS[0];
+  const View = current.view;
 
-    client.onConnectionLost = (responseObject) => {
-      if (responseObject.errorCode !== 0) {
-        console.error("MQTT Connection Lost:", responseObject.errorMessage);
-      }
-    };
-
-    client.onMessageArrived = (message) => {
-      try {
-        const topic = message.destinationName;
-        const payload = JSON.parse(message.payloadString);
-        
-        // Settings Mapping
-        if (topic.startsWith("openrivian/settings/status/")) {
-          const paramKey = topic.split('/').pop();
-          setSettings(prev => ({ ...prev, [paramKey]: payload.value }));
-        }
-        // Telemetry Mapping
-        else if (topic === "openrivian/vehicle/powertrain/speed_mph") {
-          setTelemetry(prev => ({ ...prev, speed: Math.round(payload.value) }));
-        }
-        else if (topic === "openrivian/vehicle/powertrain/gear") {
-          setTelemetry(prev => ({ ...prev, gear: payload.value }));
-        }
-        else if (topic === "openrivian/vehicle/powertrain/soc") {
-          setTelemetry(prev => ({ ...prev, battery: Math.round(payload.value) }));
-        }
-        else if (topic === "openrivian/adas/active") {
-          setTelemetry(prev => ({ ...prev, adasActive: payload.value }));
-        }
-        else if (topic === "openrivian/vehicle/powertrain/wheel_speed_fl") {
-          setTelemetry(prev => ({ ...prev, flSpeed: Math.round(payload.value) }));
-        }
-        else if (topic === "openrivian/vehicle/powertrain/wheel_speed_fr") {
-          setTelemetry(prev => ({ ...prev, frSpeed: Math.round(payload.value) }));
-        }
-        else if (topic === "openrivian/vehicle/powertrain/wheel_speed_rl") {
-          setTelemetry(prev => ({ ...prev, rlSpeed: Math.round(payload.value) }));
-        }
-        else if (topic === "openrivian/vehicle/powertrain/wheel_speed_rr") {
-          setTelemetry(prev => ({ ...prev, rrSpeed: Math.round(payload.value) }));
-        }
-        else if (topic === "openrivian/device/hardware/cpu_temp_c") {
-          setTelemetry(prev => ({ ...prev, cpuTemp: Math.round(payload.value) }));
-        }
-        else if (topic === "openrivian/device/hardware/free_space_percent") {
-          setTelemetry(prev => ({ ...prev, freeSpace: payload.value.toFixed(1) }));
-        }
-      } catch (e) {
-        console.error("Error parsing MQTT message:", e);
-      }
-    };
-
-    client.connect({
-      onSuccess: () => {
-        console.log("Connected to MQTT Broker");
-        client.subscribe("openrivian/vehicle/#");
-        client.subscribe("openrivian/device/#");
-        client.subscribe("openrivian/settings/status/#");
-      },
-      onFailure: (e) => console.error("MQTT Connection Failed", e)
-    });
-
-    setMqttClient(client);
-
-    return () => {
-      if (client.isConnected()) {
-        client.disconnect();
-      }
-    };
-  }, []);
-
-  const handleUpdateSetting = (key, value) => {
-    if (mqttClient && mqttClient.isConnected()) {
-      const message = new Paho.Message(JSON.stringify({ value }));
-      message.destinationName = `openrivian/settings/set/${key}`;
-      mqttClient.send(message);
-    }
-    
-    setSettings(prev => ({ ...prev, [key]: value }));
+  const setTab = (id) => {
+    setTabState(id);
+    try { localStorage.setItem('orv.tab', id); } catch { /* noop */ }
   };
 
+  useEffect(() => {
+    if (window.location.hash.replace('#', '') !== tab) window.location.hash = tab;
+  }, [tab]);
+
+  useEffect(() => {
+    const onHash = () => {
+      const h = window.location.hash.replace('#', '');
+      if (TAB_IDS.includes(h)) setTabState(h);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
-      
-      {/* Top Bar Navigation */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        gap: '1rem', 
-        padding: '1rem', 
-        background: '#121212', 
-        borderBottom: '3px solid #1A1A1A',
-        zIndex: 100 
-      }}>
-        {['telemetry', 'settings', 'history', 'controls', 'showcase'].map(tab => (
-          <button 
-            key={tab}
-            className="cel-button"
-            onClick={() => setActiveTab(tab)}
-            style={{
-              background: activeTab === tab ? '#FFD500' : '#333',
-              color: activeTab === tab ? '#000' : '#FFF',
-              textTransform: 'capitalize'
-            }}
-          >
-            {tab}
+    <div className="app">
+      <nav className="rail">
+        <div className="brand">
+          <div className="brand-mark">R</div>
+          <div className="brand-name">OpenRivian<small>COMPANION</small></div>
+        </div>
+        {TABS.map((t) => (
+          <button key={t.id} className={`nav-btn ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+            <span className="nav-ic">{t.icon}</span>{t.label}
           </button>
         ))}
+      </nav>
+
+      <div className="main">
+        <header className="topbar">
+          <h1>{current.label}</h1>
+          <div className="row">
+            <ConnBadge />
+            <button className="icon-btn" title="App settings" onClick={() => setSettingsOpen((v) => !v)}>⚙</button>
+          </div>
+        </header>
+        {settingsOpen && <AppSettings onClose={() => setSettingsOpen(false)} />}
+        <main className="content">
+          <Alerts />
+          <View />
+        </main>
       </div>
 
-      {/* Main Routing Area */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 'telemetry' && <Telemetry telemetry={telemetry} />}
-        {activeTab === 'settings' && (
-          <SettingsView 
-            activePanelId={activePanelId} 
-            setActivePanelId={setActivePanelId} 
-            settings={settings} 
-            onUpdateSetting={handleUpdateSetting} 
-          />
-        )}
-        {activeTab === 'history' && <DriveHistory />}
-        {activeTab === 'controls' && <Controls mqttClient={mqttClient} />}
-      </div>
+      <nav className="tabbar">
+        {TABS.map((t) => (
+          <button key={t.id} className={`tb ${tab === t.id ? 'active' : ''}`} onClick={() => setTab(t.id)}>
+            <span className="nav-ic">{t.icon}</span>{t.label}
+          </button>
+        ))}
+      </nav>
     </div>
   );
 }
-
-export default App;
