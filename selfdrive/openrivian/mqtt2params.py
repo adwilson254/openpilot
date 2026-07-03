@@ -28,12 +28,14 @@ _HERE = os.path.dirname(__file__)
 PARAMS_META_PATH = os.path.abspath(os.path.join(_HERE, "../../sunnypilot/sunnylink/params_metadata.json"))
 SETTINGS_UI_PATH = os.path.abspath(os.path.join(_HERE, "dashboard/src/assets/settings_ui.json"))
 
-# Hard safety denylist: params that must NEVER be writable over MQTT, regardless of
-# what the UI schema or metadata contains. These are persistent state/blobs in
-# /data/params that, if overwritten with the wrong value/type, corrupt calibration,
-# the model, driver monitoring, or device identity -- and that corruption survives
-# branch switches and reboots. (A too-broad whitelist here previously allowed e.g.
-# CalibrationParams to be set, which can brick engagement with a "take over" alert.)
+# This daemon is READ-ONLY: it publishes current param values to MQTT and never writes
+# params back. This exposure denylist governs what must NEVER be published to the broker
+# -- persistent state/blobs and device identity (calibration, model, driver monitoring,
+# tokens, serials) that should not leave the device. (Historically this was a *write*
+# denylist: a too-broad whitelist once let params like CalibrationParams be set over
+# MQTT, which corrupts persistent state that survives reboots and can brick engagement
+# with a "take over" alert. Removing the write path eliminates that risk at the source;
+# the denylist stays as defense-in-depth against leaking sensitive params.)
 DENY_EXACT = {
     "CalibrationParams", "LiveCalibration", "LiveParameters", "LiveTorqueParameters",
     "LiveDelay", "ControlsReady", "FirmwareQueryDone", "CompletedTrainingVersion",
@@ -43,7 +45,7 @@ DENY_EXACT = {
 DENY_PREFIX = ("Offroad_", "ModelManager_", "ModelRunnerType", "Live", "CarParams", "Calibration", "Camera")
 
 
-def _is_safe_to_write(key):
+def _is_safe_to_publish(key):
     return key not in DENY_EXACT and not key.startswith(DENY_PREFIX)
 
 
@@ -74,53 +76,26 @@ def _build_whitelist():
     except Exception as e:
         logging.error(f"Failed to load params metadata: {e}")
         return []
-    # Only allow params the dashboard UI actually offers; fall back to all known
-    # params if the UI schema is unavailable. Either way, strip the safety denylist.
+    # Only publish params the dashboard UI actually offers; fall back to all known
+    # params if the UI schema is unavailable. Either way, strip the exposure denylist.
     try:
         allowed = _ui_exposed_keys(SETTINGS_UI_PATH) & known
     except Exception as e:
         logging.warning(f"settings_ui.json unavailable ({e}); restricting to denylist-filtered metadata")
         allowed = known
-    return sorted(k for k in allowed if _is_safe_to_write(k))
+    return sorted(k for k in allowed if _is_safe_to_publish(k))
 
 
 PARAMS_WHITELIST = _build_whitelist()
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        logging.info("[+] Connected to MQTT broker for Settings Sync")
-        client.subscribe("openrivian/settings/set/#")
-        # Publish initial states
+        logging.info("[+] Connected to MQTT broker for Settings Publish (read-only)")
+        # Read-only: publish current states. We never subscribe to 'set' topics, so
+        # nothing can write params back through this bridge.
         publish_all_params(client)
     else:
         logging.error(f"[-] Failed to connect: {rc}")
-
-def on_message(client, userdata, msg):
-    try:
-        param_name = msg.topic.split("/")[-1]
-        
-        # Only allow setting whitelisted params to prevent dangerous overwrites
-        if param_name not in PARAMS_WHITELIST or not _is_safe_to_write(param_name):
-            logging.warning(f"Attempted to set non-whitelisted/protected param: {param_name}")
-            return
-            
-        payload = json.loads(msg.payload.decode())
-        val = payload.get("value")
-        
-        # Writes Enabled
-        logging.info(f"Writing Param '{param_name}' to {val}")
-        if isinstance(val, bool):
-            params.put_bool(param_name, val)
-        elif isinstance(val, (int, float)):
-            params.put(param_name, str(val).encode('utf-8'))
-        elif isinstance(val, str):
-            params.put(param_name, val.encode('utf-8'))
-        
-        # Echo the new status back to MQTT so UI updates
-        client.publish(f"openrivian/settings/status/{param_name}", json.dumps({"value": val}), retain=True)
-        
-    except Exception as e:
-        logging.error(f"Failed to set param {msg.topic}: {e}")
 
 last_published_values = {}
 
@@ -167,7 +142,7 @@ def build_client():
 def main():
 
     logging.basicConfig(level=logging.INFO)
-    logging.info("[*] Starting Settings Sync Bridge...")
+    logging.info("[*] Starting Settings Publish Bridge (read-only)...")
 
     if mqtt is None:
         logging.error("Missing paho-mqtt. Gracefully exiting mqtt2params.")
@@ -175,8 +150,9 @@ def main():
 
     client = build_client()
     client.on_connect = on_connect
-    client.on_message = on_message
-    
+    # Read-only by design: no on_message handler is registered and we never subscribe
+    # to 'set' topics, so this bridge cannot write params.
+
     connected = False
     while not connected:
         try:
@@ -185,12 +161,12 @@ def main():
         except ConnectionRefusedError:
             time.sleep(2)
 
-    # Loop forever, listening for sets and occasionally polling for changes
+    # Loop forever, periodically publishing current param values.
     client.loop_start()
-    
+
     while True:
         publish_all_params(client)
-        time.sleep(5)  # Poll params every 5 seconds to catch changes made from the UI in the car
+        time.sleep(5)  # Poll params every 5 seconds to reflect changes made from the car UI
 
 if __name__ == '__main__':
     main()

@@ -1,9 +1,9 @@
-"""Validate the mqtt2params write-protection against the REAL device param store.
+"""Validate mqtt2params read-only exposure against the REAL device param store.
 
 Loads the actual /data/params/d values captured from the vehicle and confirms the
-hardened whitelist behaves correctly on genuine state: dangerous params that exist on
-the device (calibration blob, model cache, OBD, offroad flags) are never published or
-writable, while normal user settings are.
+publish whitelist behaves correctly on genuine state: dangerous params that exist on
+the device (calibration blob, model cache, OBD, offroad flags) are never published,
+while normal user settings are. (This daemon is read-only; it cannot write params.)
 
 Skipped unless ORV_PARAMS_DIR points at a real param dir (the parity container mounts
 it; see run_parity.sh). Never required in the lightweight CI lane or on a bare machine.
@@ -55,18 +55,6 @@ def test_dangerous_device_params_never_published(fake_params, fake_mqtt_client, 
     assert published, "expected some safe params published from real device state"
 
 
-def test_dangerous_device_params_not_writable(fake_params, fake_mqtt_client, monkeypatch):
-    import json
-    real = _load_real_params()
-    fake_params.store = dict(real)
-    monkeypatch.setattr(mqtt2params, "params", fake_params)
-    before = dict(fake_params.store)
-
-    for key in DANGEROUS:
-        msg = type("M", (), {"topic": f"openrivian/settings/set/{key}",
-                             "payload": json.dumps({"value": "x"}).encode()})()
-        mqtt2params.on_message(fake_mqtt_client, None, msg)
-
-    # No dangerous param value changed.
-    for key in DANGEROUS:
-        assert fake_params.store.get(key) == before.get(key), f"{key} was modified via MQTT"
+def test_no_write_path_exists():
+    # Read-only daemon: with no on_message handler, no device param is writable via MQTT.
+    assert not hasattr(mqtt2params, "on_message")

@@ -1,5 +1,4 @@
 """Behavioral tests for the MQTT bridge daemons (cereal2mqtt, mqtt2params, mqttd)."""
-import json
 import types
 
 import pytest
@@ -68,34 +67,20 @@ def test_publish_state_maps_carstate(fake_mqtt_client):
 
 
 # --------------------------------------------------------------------------- #
-# mqtt2params: whitelist enforcement (security-relevant) + typed writes + dedupe
+# mqtt2params: read-only publishing (no write path) + dedupe
 # --------------------------------------------------------------------------- #
-def _msg(topic, value):
-    return types.SimpleNamespace(topic=topic, payload=json.dumps({"value": value}).encode())
-
-
-def test_on_message_rejects_non_whitelisted_param(monkeypatch, fake_params, fake_mqtt_client):
+def test_mqtt2params_is_read_only(monkeypatch, fake_params, fake_mqtt_client):
+    # No 'set' handler exists, and connecting never subscribes to a 'set' topic, so a
+    # stray/retained MQTT message can never write a param.
     monkeypatch.setattr(mqtt2params, "params", fake_params)
-    monkeypatch.setattr(mqtt2params, "PARAMS_WHITELIST", ["AllowedToggle"])
-    mqtt2params.on_message(fake_mqtt_client, None, _msg("openrivian/settings/set/DangerousKey", True))
-    # Nothing written, nothing echoed back.
+    monkeypatch.setattr(mqtt2params, "PARAMS_WHITELIST", ["SomeToggle"])
+    monkeypatch.setattr(mqtt2params, "last_published_values", {})
+
+    assert not hasattr(mqtt2params, "on_message")
+    mqtt2params.on_connect(fake_mqtt_client, None, None, 0)
+    assert fake_mqtt_client.subscriptions == []
+    # Publishing is read-only: it never mutates the param store.
     assert fake_params.store == {}
-    assert fake_mqtt_client.published == []
-
-
-def test_on_message_writes_whitelisted_types(monkeypatch, fake_params, fake_mqtt_client):
-    monkeypatch.setattr(mqtt2params, "params", fake_params)
-    monkeypatch.setattr(mqtt2params, "PARAMS_WHITELIST", ["BoolKey", "NumKey", "StrKey"])
-
-    mqtt2params.on_message(fake_mqtt_client, None, _msg("openrivian/settings/set/BoolKey", True))
-    mqtt2params.on_message(fake_mqtt_client, None, _msg("openrivian/settings/set/NumKey", 42))
-    mqtt2params.on_message(fake_mqtt_client, None, _msg("openrivian/settings/set/StrKey", "hello"))
-
-    assert fake_params.get_bool("BoolKey") is True
-    assert fake_params.get("NumKey") == b"42"
-    assert fake_params.get("StrKey") == b"hello"
-    # Each accepted write is echoed to a status topic for the UI.
-    assert "openrivian/settings/status/BoolKey" in fake_mqtt_client.topics()
 
 
 def test_publish_all_params_dedupes(monkeypatch, fake_params, fake_mqtt_client):
