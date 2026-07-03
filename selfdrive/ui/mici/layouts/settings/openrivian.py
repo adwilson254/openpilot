@@ -1,16 +1,31 @@
 from openpilot.system.ui.widgets.scroller import NavScroller
-from openpilot.selfdrive.ui.mici.widgets.button import BigButton
+from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigParamControl
 from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog, BigInputDialog
 from openpilot.system.ui.lib.application import gui_app
 from openpilot.selfdrive.openrivian.api.rivian_api import RivianAPI
+
+# Per-service toggles. The OpenRivian daemons default to ON; enabling a toggle DISABLES
+# that one service (leaving the others running) so you can isolate which service is
+# causing an issue. Maps to the OpenRivian<Svc>Disabled params read by process_gating.
+_SERVICE_TOGGLES = [
+    ("disable rivian api", "OpenRivianApiDisabled"),
+    ("disable mqtt broker", "OpenRivianBrokerDisabled"),
+    ("disable telemetry (cereal to mqtt)", "OpenRivianTelemetryDisabled"),
+    ("disable settings publish", "OpenRivianSettingsPublishDisabled"),
+    ("disable web dashboard", "OpenRivianWebDashboardDisabled"),
+]
+
 
 class OpenRivianLayoutMici(NavScroller):
   def __init__(self):
     super().__init__()
     self._login_btn = BigButton("Rivian Account", "LOGIN", scroll=False)
     self._login_btn.set_click_callback(self._on_rivian_login)
-    
-    self._scroller.add_widgets([self._login_btn])
+
+    # ON = that service is disabled. Restart takes effect on the next manager cycle.
+    self._service_toggles = [BigParamControl(label, param) for label, param in _SERVICE_TOGGLES]
+
+    self._scroller.add_widgets([self._login_btn, *self._service_toggles])
     
   def _on_rivian_login(self):
     def email_cb(email: str):
