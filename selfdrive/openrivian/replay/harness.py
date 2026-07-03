@@ -184,6 +184,11 @@ def replay(frames, client=None):
     _ensure_importable()
     import selfdrive.openrivian.cereal2mqtt as c2m
 
+    # Each replay is a fresh bridge session: clear the per-topic publish bookkeeping so
+    # rate/on-change gating starts clean, keeping replays deterministic and isolated.
+    if hasattr(c2m, "_pub_state"):
+        c2m._pub_state.clear()
+
     client = client or RecordingClient()
     sm = FakeSubMaster(c2m.SUBSCRIPTIONS)
     for frame in frames:

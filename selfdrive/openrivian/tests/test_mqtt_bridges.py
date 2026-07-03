@@ -19,6 +19,7 @@ def test_build_client_uses_supported_api(mod):
 # cereal2mqtt.publish_safely + mapping
 # --------------------------------------------------------------------------- #
 def test_publish_safely_rounds_floats_and_wraps_value(fake_mqtt_client):
+    cereal2mqtt._pub_state.clear()
     cereal2mqtt.publish_safely(fake_mqtt_client, "t/x", 1.23456789)
     topic, payload, retain = fake_mqtt_client.published[0]
     assert topic == "t/x"
@@ -27,11 +28,34 @@ def test_publish_safely_rounds_floats_and_wraps_value(fake_mqtt_client):
 
 
 def test_publish_safely_swallows_client_errors():
+    cereal2mqtt._pub_state.clear()
     class Boom:
         def publish(self, *_a, **_k):
             raise RuntimeError("broker down")
     # Must not raise — telemetry failures should never crash the daemon.
     cereal2mqtt.publish_safely(Boom(), "t/x", 1)
+
+
+def test_on_change_topic_dedupes_then_publishes_on_change(fake_mqtt_client):
+    # State topics publish once, skip while unchanged, then publish again on change.
+    cereal2mqtt._pub_state.clear()
+    t = "openrivian/vehicle/controls/brake_pressed"  # an ON_CHANGE topic
+    cereal2mqtt.publish_safely(fake_mqtt_client, t, True)
+    cereal2mqtt.publish_safely(fake_mqtt_client, t, True)   # unchanged -> no republish
+    assert fake_mqtt_client.topics().count(t) == 1
+    cereal2mqtt.publish_safely(fake_mqtt_client, t, False)  # changed -> publishes
+    assert fake_mqtt_client.topics().count(t) == 2
+    # ON_CHANGE topics are retained so late subscribers get current state.
+    assert all(r is True for (tp, _p, r) in fake_mqtt_client.published if tp == t)
+
+
+def test_high_rate_topic_gates_by_interval(fake_mqtt_client):
+    # Rate-limited topics publish the first sample, then gate rapid repeats.
+    cereal2mqtt._pub_state.clear()
+    t = "openrivian/vehicle/dynamics/accel_x"  # HIGH_RATE topic
+    cereal2mqtt.publish_safely(fake_mqtt_client, t, 1.0)
+    cereal2mqtt.publish_safely(fake_mqtt_client, t, 2.0)  # immediate repeat -> gated
+    assert fake_mqtt_client.topics().count(t) == 1
 
 
 class _FakeSubMaster:
@@ -45,12 +69,13 @@ class _FakeSubMaster:
 
 def _carstate_only_submaster(cs):
     keys = ['carState', 'controlsState', 'radarState', 'managerState',
-            'deviceState', 'pandaStates', 'liveLocationKalman']
+            'deviceState', 'pandaStates', 'liveLocationKalman', 'accelerometer']
     updated = {k: (k == 'carState') for k in keys}
     return _FakeSubMaster(updated, lambda _key: cs)
 
 
 def test_publish_state_maps_carstate(fake_mqtt_client):
+    cereal2mqtt._pub_state.clear()
     cs = types.SimpleNamespace(
         vEgo=10.0, standstill=False, gasPressed=False, brakePressed=True,
         steeringAngleDeg=1.5, gearShifter="drive", doorOpen=False,
