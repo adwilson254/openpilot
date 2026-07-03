@@ -64,9 +64,10 @@ def only_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return not started
 
-# OpenRivian telemetry-stack gate (auto-on for Rivian, else honors OpenRivianEnabled).
-# Implemented in a dependency-free module so it can be unit-tested in isolation.
-from openpilot.selfdrive.openrivian.process_gating import openrivian_enabled
+# OpenRivian telemetry-stack gates: master gate (auto-on for Rivian, else honors
+# OpenRivianEnabled) plus per-service toggles. Dependency-free module so it can be
+# unit-tested in isolation.
+from openpilot.selfdrive.openrivian.process_gating import service_enabled
 
 def use_github_runner(started, params, CP: car.CarParams) -> bool:
   return not PC and params.get_bool("EnableGithubRunner") and (
@@ -186,12 +187,15 @@ procs += [
   # locationd
   NativeProcess("locationd_llk", "sunnypilot/selfdrive/locationd", ["./locationd"], only_onroad),
 
-  # OpenRivian
-  PythonProcess("openriviand", "selfdrive.openrivian.api.openriviand", openrivian_enabled),
-  PythonProcess("mqttd", "selfdrive.openrivian.mqttd", openrivian_enabled),
-  PythonProcess("cereal2mqtt", "selfdrive.openrivian.cereal2mqtt", openrivian_enabled),
-  PythonProcess("mqtt2params", "selfdrive.openrivian.mqtt2params", openrivian_enabled),
-  PythonProcess("webd", "selfdrive.openrivian.webd", openrivian_enabled),
+  # OpenRivian telemetry stack. Each daemon is gated by the shared master gate AND its
+  # own per-service toggle (OpenRivian<Svc>Disabled) so any one can be disabled
+  # independently for isolation/testing. This block is identical across the OpenRivian
+  # feature branches so they merge without conflict.
+  PythonProcess("openriviand", "selfdrive.openrivian.api.openriviand", service_enabled("openriviand")),
+  PythonProcess("mqttd", "selfdrive.openrivian.mqttd", service_enabled("mqttd")),
+  PythonProcess("cereal2mqtt", "selfdrive.openrivian.cereal2mqtt", service_enabled("cereal2mqtt")),
+  PythonProcess("mqtt2params", "selfdrive.openrivian.mqtt2params", service_enabled("mqtt2params")),
+  PythonProcess("webd", "selfdrive.openrivian.webd", service_enabled("webd")),
 ]
 
 if os.path.exists("./github_runner.sh"):
