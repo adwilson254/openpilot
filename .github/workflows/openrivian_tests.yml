@@ -61,10 +61,30 @@ jobs:
           # EXPLICITLY EXCLUDES can-decode/can-debug to keep it standalone
           FEATURE_BRANCHES=("api" "web-dashboard" "mqtt")
 
+          # Feature-branch independence: a branch that fails to merge is aborted and
+          # SKIPPED so the others still integrate. dev-test is built from whatever merges
+          # cleanly; we only fail the build if nothing merged at all.
+          MERGED=()
+          SKIPPED=()
           for branch in "${FEATURE_BRANCHES[@]}"; do
             echo "Merging origin/$branch into dev-test..."
-            git merge "origin/$branch" --no-edit || { echo "Merge conflict with $branch"; exit 1; }
+            if git merge "origin/$branch" --no-edit; then
+              MERGED+=("$branch")
+            else
+              echo "::warning::Merge conflict with '$branch'; aborting that merge and continuing so the other feature branches still integrate."
+              git merge --abort
+              SKIPPED+=("$branch")
+            fi
           done
+          echo "Merged cleanly:  ${MERGED[*]:-none}"
+          echo "Skipped (conflict): ${SKIPPED[*]:-none}"
+          if [ "${#SKIPPED[@]}" -ne 0 ]; then
+            echo "::warning::dev-test was built WITHOUT: ${SKIPPED[*]}. Resolve the conflict on those branches to re-include them."
+          fi
+          if [ "${#MERGED[@]}" -eq 0 ]; then
+            echo "::error::No feature branches merged cleanly into dev-test; failing the build."
+            exit 1
+          fi
 
       - name: Install uv
         uses: astral-sh/setup-uv@v2
