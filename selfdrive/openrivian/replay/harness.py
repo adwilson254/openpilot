@@ -135,7 +135,7 @@ def synthetic_frames(n=20, hz=2.0):
                 "rightBlinker": False,
                 "fuelGauge": 0.72,
             },
-            "controlsState": {"enabled": True, "activeDEPRECATED": v > 5.0},
+            "selfdriveState": {"enabled": True, "active": v > 5.0},
             "radarState": {"leadOne": {"status": v > 5.0, "dRel": 42.0 - v, "vRel": -1.5}},
             "managerState": {"processes": [{"name": "camerad", "running": True}]},
             "deviceState": {
@@ -145,13 +145,24 @@ def synthetic_frames(n=20, hz=2.0):
                 "powerDrawW": 22.0 + 4.0 * math.sin(t / 3.0),
             },
             "pandaStates": [{"ignitionLine": True, "ignitionCan": False, "voltage": 12450}],
-            "liveLocationKalman": {
-                "positionGeodetic": {
-                    "valid": True,
-                    "value": [37.7749 + 0.002 * math.sin(t / 30), -122.4194 + 0.002 * math.cos(t / 30), 60.0],
-                },
-                "calibratedOrientationNED": {"valid": True, "value": [(t * 6) % 360, 0.0, 0.0]},
+            # gpsLocationExternal: degrees-native fix + course-over-ground heading.
+            # (The old liveLocationKalman frames misused calibratedOrientationNED[0]
+            # -- roll, radians -- as "bearing"; that field is NOT a heading.)
+            "gpsLocationExternal": {
+                "hasFix": True,
+                "latitude": 37.7749 + 0.002 * math.sin(t / 30),
+                "longitude": -122.4194 + 0.002 * math.cos(t / 30),
+                "altitude": 60.0,
+                "bearingDeg": (t * 6.0) % 360.0,
             },
+            # Health canaries: a healthy stack (nice 0 core procs, no comm events).
+            "procLog": {"procs": [
+                {"name": "selfdrive.selfd", "nice": 0},
+                {"name": "selfdrive.model", "nice": 0},
+                {"name": "camerad", "nice": 0},
+                {"name": "selfdrive.openr", "nice": 19},  # our daemons: nice by design, not watched
+            ]},
+            "onroadEvents": [],
         }
 
 

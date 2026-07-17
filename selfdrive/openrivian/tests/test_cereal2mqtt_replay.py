@@ -49,20 +49,62 @@ def test_voltage_is_millivolts_over_1000():
     assert client.last("openrivian/device/hardware/voltage") == 12.345
 
 
-def test_location_published_only_when_valid():
+def test_location_published_only_with_gps_fix():
     frame = next(harness.synthetic_frames(n=1))
-    frame["liveLocationKalman"]["positionGeodetic"] = {"valid": False, "value": [1.0, 2.0, 3.0]}
+    frame["gpsLocationExternal"] = {"hasFix": False, "latitude": 1.0, "longitude": 2.0,
+                                    "altitude": 3.0, "bearingDeg": 90.0}
     client = _run(frame)
     assert client.last("openrivian/vehicle/location/latitude") is None
     assert client.last("openrivian/vehicle/location/longitude") is None
+    assert client.last("openrivian/vehicle/location/bearing") is None
 
 
-def test_location_values_pass_through_when_valid():
+def test_location_values_pass_through_with_fix():
     frame = next(harness.synthetic_frames(n=1))
-    frame["liveLocationKalman"]["positionGeodetic"] = {"valid": True, "value": [37.5, -122.5, 50.0]}
+    frame["gpsLocationExternal"] = {"hasFix": True, "latitude": 37.5, "longitude": -122.5,
+                                    "altitude": 50.0, "bearingDeg": 271.25}
     client = _run(frame)
     assert client.last("openrivian/vehicle/location/latitude") == 37.5
     assert client.last("openrivian/vehicle/location/longitude") == -122.5
+    assert client.last("openrivian/vehicle/location/altitude") == 50.0
+    # bearing is course-over-ground in DEGREES, passed through (not roll/radians --
+    # the old liveLocationKalman path published calibratedOrientationNED[0] = roll).
+    assert client.last("openrivian/vehicle/location/bearing") == 271.25
+
+
+def test_bearing_normalized_to_0_360():
+    frame = next(harness.synthetic_frames(n=1))
+    frame["gpsLocationExternal"] = {"hasFix": True, "latitude": 0.0, "longitude": 0.0,
+                                    "altitude": 0.0, "bearingDeg": -10.0}
+    client = _run(frame)
+    assert client.last("openrivian/vehicle/location/bearing") == 350.0
+
+
+def test_sched_health_flags_demotion():
+    # nice 0 core procs -> healthy; a demoted core proc -> canary trips. Our own
+    # daemons (selfdrive.openr*) run nice 19 by design and must NOT trip it.
+    frame = next(harness.synthetic_frames(n=1))
+    frame["procLog"] = {"procs": [{"name": "selfdrive.selfd", "nice": 0},
+                                  {"name": "selfdrive.openr", "nice": 19}]}
+    client = _run(frame)
+    assert client.last("openrivian/health/sched_demoted") is False
+    assert client.last("openrivian/health/sched_nice_max") == 0
+
+    frame["procLog"] = {"procs": [{"name": "selfdrive.selfd", "nice": 19}]}
+    client = _run(frame)
+    assert client.last("openrivian/health/sched_demoted") is True
+    assert client.last("openrivian/health/sched_nice_max") == 19
+
+
+def test_comm_issue_flag_from_onroad_events():
+    frame = next(harness.synthetic_frames(n=1))
+    frame["onroadEvents"] = []
+    client = _run(frame)
+    assert client.last("openrivian/health/comm_issue") is False
+
+    frame["onroadEvents"] = [{"name": "commIssue"}]
+    client = _run(frame)
+    assert client.last("openrivian/health/comm_issue") is True
 
 
 def test_lead_absent_publishes_sentinel():

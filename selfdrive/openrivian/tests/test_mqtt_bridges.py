@@ -68,9 +68,9 @@ class _FakeSubMaster:
 
 
 def _carstate_only_submaster(cs):
-    keys = ['carState', 'controlsState', 'radarState', 'managerState',
-            'deviceState', 'pandaStates', 'liveLocationKalman', 'accelerometer']
-    updated = {k: (k == 'carState') for k in keys}
+    # Derive the key set from the module's own SUBSCRIPTIONS so this fake can never
+    # drift from what publish_state actually reads.
+    updated = {k: (k == 'carState') for k in cereal2mqtt.SUBSCRIPTIONS}
     return _FakeSubMaster(updated, lambda _key: cs)
 
 

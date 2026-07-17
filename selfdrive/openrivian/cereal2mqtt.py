@@ -70,7 +70,34 @@ ON_CHANGE_TOPICS = {
     "openrivian/adas/enabled",
     "openrivian/adas/active",
     "openrivian/device/hardware/camerad_running",
+    # Health canaries (see the HEALTH block in publish_state): slow-changing flags,
+    # retained so a late-connecting dashboard sees current health immediately.
+    "openrivian/health/sched_demoted",
+    "openrivian/health/sched_nice_max",
+    "openrivian/health/comm_issue",
 }
+
+# Scheduling-health watchlist: core openpilot processes that must run at nice 0.
+# procLog reports the kernel comm name, truncated to 15 chars, so these are PREFIXES
+# of the truncated names (e.g. selfdrived -> "selfdrive.selfd"). The OpenRivian
+# daemons are deliberately excluded -- they run at nice 19 by design. Any watched
+# process with nice > 0 means the stack got demoted again (the 2026-07 root cause:
+# a module-level os.nice(19) inherited through the manager's daemon pre-import).
+SCHED_WATCH_PREFIXES = (
+    "camerad",
+    "pandad",
+    "loggerd",
+    "selfdrive.selfd",   # selfdrived
+    "selfdrive.contr",   # controlsd
+    "selfdrive.model",   # modeld
+    "selfdrive.locat",   # locationd
+    "selfdrive.car.c",   # card
+    "selfdrive.ui.ui",   # ui
+)
+
+# onroadEvents names that indicate the inter-process comm watchdog is tripping
+# (the precursor of the "TAKE CONTROL IMMEDIATELY / Communication Issue" alert).
+COMM_ISSUE_EVENTS = {"commIssue", "commIssueAvgFreq"}
 
 # Per-topic publish bookkeeping: topic -> (last_value, last_publish_monotonic).
 _pub_state: dict = {}
@@ -95,12 +122,29 @@ def _should_publish(topic, val, now):
 
 # Cereal services this bridge subscribes to. Module-level so the replay harness
 # can build a matching SubMaster without duplicating the list.
-SUBSCRIPTIONS = ['carState', 'deviceState', 'liveLocationKalman', 'pandaStates',
-                 'controlsState', 'radarState', 'managerState', 'accelerometer']
+# NOTE deliberate service choices (deprecated-field cleanup, 2026-07):
+#   - gpsLocationExternal (not liveLocationKalman, which is deprecated upstream):
+#     degrees-native lat/lon/alt + bearingDeg + hasFix.
+#   - selfdriveState (not controlsState.activeDEPRECATED) for enabled/active.
+#   - procLog (0.5 Hz) + onroadEvents (1 Hz) feed the health canaries.
+SUBSCRIPTIONS = ['carState', 'deviceState', 'gpsLocationExternal', 'pandaStates',
+                 'selfdriveState', 'radarState', 'managerState', 'accelerometer',
+                 'procLog', 'onroadEvents']
+
+# Liveness contract with the dashboard: a retained flag that the BROKER flips to
+# False for us if this bridge dies (MQTT Last Will), and that we set back to True on
+# every (re)connect. Retained state topics otherwise look "fresh" forever to a late
+# subscriber, so without this the dashboard cannot tell a live feed from a dead one.
+ALIVE_TOPIC = "openrivian/health/telemetry_alive"
+
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         logging.info("[+] Connected to local MQTT broker!")
+        try:
+            client.publish(ALIVE_TOPIC, json.dumps({"value": True}), retain=True)
+        except Exception as e:
+            logging.debug(f"alive publish failed: {e}")
     else:
         logging.error(f"[-] Failed to connect to MQTT broker, return code {rc}")
 
@@ -164,8 +208,8 @@ def publish_state(client, sm):
         # Longitudinal acceleration (derived) -- high-rate lane alongside raw IMU above.
         if hasattr(cs, 'aEgo'):
             publish_safely(client, "openrivian/vehicle/powertrain/a_ego", cs.aEgo)
-        if hasattr(cs, 'engineRpmDEPRECATED'):
-            publish_safely(client, "openrivian/vehicle/powertrain/engine_rpm", cs.engineRpmDEPRECATED)
+        # engine_rpm was dropped: it read carState.engineRpmDEPRECATED, which is
+        # meaningless on an EV and slated for removal upstream.
 
         # Wheel Speeds
         if hasattr(cs, 'wheelSpeeds'):
@@ -205,13 +249,15 @@ def publish_state(client, sm):
             publish_safely(client, "openrivian/vehicle/adas/cruise_speed_mph", getattr(cs.cruiseState, 'speed', 0.0) * 2.23694)
             publish_safely(client, "openrivian/vehicle/adas/cruise_available", getattr(cs.cruiseState, 'available', False))
 
-    # --- CONTROLS STATE (ADAS) ---
-    if sm.updated['controlsState']:
-        ctrl = sm['controlsState']
-        if hasattr(ctrl, 'enabled'):
-            publish_safely(client, "openrivian/adas/enabled", ctrl.enabled)
-        if hasattr(ctrl, 'activeDEPRECATED'):
-            publish_safely(client, "openrivian/adas/active", ctrl.activeDEPRECATED)
+    # --- SELFDRIVE STATE (ADAS) ---
+    # selfdriveState is the current home of enabled/active (controlsState.enabled /
+    # activeDEPRECATED are legacy fields that upstream is removing).
+    if sm.updated['selfdriveState']:
+        ss = sm['selfdriveState']
+        if hasattr(ss, 'enabled'):
+            publish_safely(client, "openrivian/adas/enabled", ss.enabled)
+        if hasattr(ss, 'active'):
+            publish_safely(client, "openrivian/adas/active", ss.active)
 
     # --- RADAR STATE ---
     if sm.updated['radarState']:
@@ -253,17 +299,40 @@ def publish_state(client, sm):
         publish_safely(client, "openrivian/device/hardware/voltage", ps.voltage / 1000.0)
 
     # --- LOCATION ---
-    if sm.updated['liveLocationKalman']:
-        llk = sm['liveLocationKalman']
-        if hasattr(llk, 'positionGeodetic') and llk.positionGeodetic.valid:
-            # latitude, longitude, altitude
-            publish_safely(client, "openrivian/vehicle/location/latitude", llk.positionGeodetic.value[0])
-            publish_safely(client, "openrivian/vehicle/location/longitude", llk.positionGeodetic.value[1])
-            publish_safely(client, "openrivian/vehicle/location/altitude", llk.positionGeodetic.value[2])
+    # gpsLocationExternal is degrees-native and carries a real heading (bearingDeg,
+    # course over ground). This replaced liveLocationKalman, which (a) is deprecated
+    # upstream and (b) we were misreading: calibratedOrientationNED.value[0] is ROLL
+    # in radians, not heading -- the old "bearing" topic was publishing sensor noise.
+    if sm.updated['gpsLocationExternal']:
+        gps = sm['gpsLocationExternal']
+        if getattr(gps, 'hasFix', False):
+            publish_safely(client, "openrivian/vehicle/location/latitude", gps.latitude)
+            publish_safely(client, "openrivian/vehicle/location/longitude", gps.longitude)
+            publish_safely(client, "openrivian/vehicle/location/altitude", gps.altitude)
+            # Normalize into [0, 360) defensively; receivers may report negative course.
+            publish_safely(client, "openrivian/vehicle/location/bearing", float(gps.bearingDeg) % 360.0)
 
-        if hasattr(llk, 'calibratedOrientationNED') and llk.calibratedOrientationNED.valid:
-            # Heading/Bearing
-            publish_safely(client, "openrivian/vehicle/location/bearing", llk.calibratedOrientationNED.value[0])
+    # --- HEALTH: scheduling canary (procLog, 0.5 Hz) ---
+    # Direct regression guard for the 2026-07 incident: if any core openpilot process
+    # is running above nice 0, the stack has been demoted and comm/validity storms
+    # ("TAKE CONTROL IMMEDIATELY / Communication Issue") will follow under load.
+    if sm.updated['procLog']:
+        try:
+            watched_nices = [int(p.nice) for p in sm['procLog'].procs
+                             if str(getattr(p, 'name', '')).startswith(SCHED_WATCH_PREFIXES)]
+            if watched_nices:
+                publish_safely(client, "openrivian/health/sched_nice_max", max(watched_nices))
+                publish_safely(client, "openrivian/health/sched_demoted", max(watched_nices) > 0)
+        except Exception as e:
+            logging.debug(f"procLog decode failed: {e}")
+
+    # --- HEALTH: inter-process comm watchdog (onroadEvents, 1 Hz) ---
+    if sm.updated['onroadEvents']:
+        try:
+            names = {str(getattr(e, 'name', '')) for e in sm['onroadEvents']}
+            publish_safely(client, "openrivian/health/comm_issue", bool(names & COMM_ISSUE_EVENTS))
+        except Exception as e:
+            logging.debug(f"onroadEvents decode failed: {e}")
 
 def main():
     # Low priority for THIS daemon only (safe here: we are in the forked child).
@@ -281,7 +350,10 @@ def main():
 
     client = build_client()
     client.on_connect = on_connect
-    
+    # Last Will: if this process dies or drops off the broker, the broker publishes
+    # retained alive=False on our behalf, flipping the dashboard's Live badge.
+    client.will_set(ALIVE_TOPIC, json.dumps({"value": False}), retain=True)
+
     # Attempt to connect to the local broker. We loop because mqttd might still be starting up.
     connected = False
     while not connected:

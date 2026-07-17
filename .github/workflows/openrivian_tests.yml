@@ -4,15 +4,22 @@ on:
     branches:
       - '**'
 
-concurrency:
-  group: build-dev
-  cancel-in-progress: true
+# Concurrency is declared PER JOB, not workflow-wide. A single workflow-wide
+# "build-dev" group made near-simultaneous pushes to DIFFERENT feature branches
+# cancel each other's runs entirely (observed 2026-07-17: api and web-dashboard
+# feature tests showed "cancelled" whenever mqtt pushed last). Feature tests are
+# per-branch and independent; only the dev-test rebuild is a shared resource.
 
 jobs:
   test_feature:
     name: Test Feature Branch
     runs-on: ubuntu-latest
-    if: github.ref != 'refs/heads/dev-test' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/dev-pre' && github.ref != 'refs/heads/clean'
+    # Per-branch group: a newer push to the SAME branch supersedes the old run,
+    # but pushes to other branches never cancel this one.
+    concurrency:
+      group: test-feature-${{ github.ref }}
+      cancel-in-progress: true
+    if: github.ref != 'refs/heads/dev-test' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/clean'
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -38,8 +45,14 @@ jobs:
     needs: test_feature
     permissions:
       contents: write
+    # Shared group: dev-test is a single shared branch, so rebuilds are serialized
+    # across ALL feature branches and a newer push cancels an in-flight rebuild
+    # (and any stale pending promote approval in the same group).
+    concurrency:
+      group: build-dev
+      cancel-in-progress: true
     # Rebuild + test on every feature-branch push (excludes deploy/base branches and can-debug).
-    if: success() && github.ref != 'refs/heads/can-decode' && github.ref != 'refs/heads/can-debug' && github.ref != 'refs/heads/dev-test' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/dev-pre' && github.ref != 'refs/heads/clean' && github.event_name == 'push'
+    if: success() && github.ref != 'refs/heads/can-decode' && github.ref != 'refs/heads/can-debug' && github.ref != 'refs/heads/dev-test' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/clean' && github.event_name == 'push'
     steps:
       - name: Checkout Clean
         uses: actions/checkout@v4
@@ -121,7 +134,10 @@ jobs:
     # Manual approval + email: the 'dev' environment has a required reviewer, so this
     # job pauses and notifies before anything reaches the dev branch the vehicle runs.
     environment: dev
-    if: success() && github.ref != 'refs/heads/can-decode' && github.ref != 'refs/heads/can-debug' && github.ref != 'refs/heads/dev-test' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/dev-pre' && github.ref != 'refs/heads/clean' && github.event_name == 'push'
+    concurrency:
+      group: build-dev
+      cancel-in-progress: true
+    if: success() && github.ref != 'refs/heads/can-decode' && github.ref != 'refs/heads/can-debug' && github.ref != 'refs/heads/dev-test' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/clean' && github.event_name == 'push'
     steps:
       - name: Checkout dev-test
         uses: actions/checkout@v4
@@ -139,11 +155,15 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Strip simulator + rebuild dashboard (production has no simulator)
+      - name: Strip simulator + test + rebuild dashboard (production has no simulator)
         working-directory: selfdrive/openrivian/dashboard
         run: |
           bash scripts/strip_sim.sh
           npm ci
+          # Gate the promoted UI: run the dashboard unit tests against the exact
+          # (stripped) tree that ships. Previously JS tests only ran on
+          # web-dashboard pushes, so dev itself was never test-gated.
+          npm test
           npm run build
 
       - name: Promote stripped build to dev
@@ -154,18 +174,14 @@ jobs:
           git add -A selfdrive/openrivian/dashboard/src selfdrive/openrivian/dashboard/scripts
           git add selfdrive/openrivian/dashboard/dist/assets selfdrive/openrivian/dashboard/dist/index.html
           git commit -m "[promote] strip simulator for production dev" || echo "nothing to strip"
-          echo "Approved. Promoting to dev (Release Candidate)."
-          git push origin HEAD:dev --force
 
-      - name: dev-pre guidance
-        run: |
-          # dev-pre is meant to be dev with C/C++ compiled and source/intermediary files
-          # stripped (a fast-booting prebuilt). CI cannot produce that (no on-device arm64
-          # toolchain), so dev-pre is NOT auto-updated here. Regenerate it on the device:
-          #   ssh comma@<ip> 'cd /data/openpilot && selfdrive/ui/openrivian/scripts/build_prebuilt.sh'
-          # then push the resulting prebuilt branch to origin/dev-pre.
-          if git diff --name-only origin/dev origin/dev-test | grep -qE '\.(c|cc|cpp|h|hpp)$|SConscript'; then
-            echo "::warning::Compiled files changed since last dev. dev-pre must be rebuilt on-device via build_prebuilt.sh."
-          else
-            echo "::notice::Only non-compiled changes. dev-pre may be fast-forwarded on-device, but is not auto-pushed by CI."
-          fi
+          # Tag every promoted build BEFORE the force-push. dev's history is
+          # rewritten on each promotion, so without a tag the SHA a drive log
+          # records (initData.gitCommit) becomes unreachable -- which made the
+          # 2026-07 incident forensics harder than they needed to be.
+          TAG="promoted-$(date -u +%Y%m%d-%H%M)-$(git rev-parse --short HEAD)"
+          git tag "$TAG"
+          git push --no-verify origin "$TAG"
+
+          echo "Approved. Promoting to dev (Release Candidate) as $TAG."
+          git push origin HEAD:dev --force
