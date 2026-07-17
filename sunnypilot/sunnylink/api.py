@@ -8,8 +8,8 @@ from datetime import datetime, timedelta, UTC
 
 from openpilot.common.api.base import BaseApi
 from openpilot.common.params import Params
-from openpilot.system.hardware import HARDWARE
-from openpilot.system.hardware.hw import Paths
+from openpilot.common.hardware import HARDWARE
+from openpilot.common.hardware.hw import Paths
 
 API_HOST = os.getenv('SUNNYLINK_API_HOST', 'https://stg.api.sunnypilot.ai')
 UNREGISTERED_SUNNYLINK_DONGLE_ID = "UnregisteredDevice"
@@ -47,16 +47,16 @@ class SunnylinkApi(BaseApi):
     return sunnylink_dongle_id, comma_dongle_id
 
   def _resolve_imeis(self):
-    imei1, imei2 = None, None
+    imei = None
     imei_try = 0
-    while imei1 is None and imei2 is None and imei_try < MAX_RETRIES:
+    while imei is None and imei_try < MAX_RETRIES:
       try:
-        imei1, imei2 = HARDWARE.get_imei(0), HARDWARE.get_imei(1)
+        imei = HARDWARE.get_imei()
       except Exception:
         self._status_update(f"Error getting imei, trying again... [{imei_try + 1}/{MAX_RETRIES}]")
         time.sleep(1)
       imei_try += 1
-    return imei1, imei2
+    return imei, ""
 
   def _resolve_serial(self):
     return (self.params.get("HardwareSerial")
@@ -85,7 +85,7 @@ class SunnylinkApi(BaseApi):
       sunnylink_dongle_id = UNREGISTERED_SUNNYLINK_DONGLE_ID
       self._status_update("Public key not found, setting dongle ID to unregistered.")
     else:
-      Params().put("LastSunnylinkPingTime", 0)  # Reset the last ping time to 0 if we are trying to register
+      Params().put("LastSunnylinkPingTime", 0, block=True)  # Reset the last ping time to 0 if we are trying to register
 
       backoff = 1
       while True:
@@ -137,15 +137,15 @@ class SunnylinkApi(BaseApi):
           time.sleep(3)
           break
 
-    self.params.put("SunnylinkDongleId", sunnylink_dongle_id or UNREGISTERED_SUNNYLINK_DONGLE_ID)
+    self.params.put("SunnylinkDongleId", sunnylink_dongle_id or UNREGISTERED_SUNNYLINK_DONGLE_ID, block=True)
 
     # Set the last ping time to the current time since we were just talking to the API
     last_ping = int((time.monotonic() if successful_registration else start_time) * 1e9)
-    Params().put("LastSunnylinkPingTime", last_ping)
+    Params().put("LastSunnylinkPingTime", last_ping, block=True)
 
     # Disable sunnylink if registration was not successful
     if not successful_registration:
-      Params().put_bool("SunnylinkEnabled", False)
+      Params().put_bool("SunnylinkEnabled", False, block=True)
 
     self.spinner = None
     return sunnylink_dongle_id

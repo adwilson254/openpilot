@@ -4,9 +4,9 @@ import platform
 
 from cereal import car, custom
 from openpilot.common.params import Params
-from openpilot.system.hardware import PC, TICI
+from openpilot.common.hardware import PC, TICI
 from openpilot.system.manager.process import PythonProcess, NativeProcess, DaemonProcess
-from openpilot.system.hardware.hw import Paths
+from openpilot.common.hardware.hw import Paths
 
 from openpilot.sunnypilot.mapd.mapd_manager import MAPD_PATH
 
@@ -34,7 +34,7 @@ def ublox_available() -> bool:
 def ublox(started: bool, params: Params, CP: car.CarParams) -> bool:
   use_ublox = ublox_available()
   if use_ublox != params.get_bool("UbloxAvailable"):
-    params.put_bool("UbloxAvailable", use_ublox)
+    params.put_bool("UbloxAvailable", use_ublox, block=True)
   return started and use_ublox
 
 def joystick(started: bool, params: Params, CP: car.CarParams) -> bool:
@@ -63,6 +63,14 @@ def only_onroad(started: bool, params: Params, CP: car.CarParams) -> bool:
 
 def only_offroad(started: bool, params: Params, CP: car.CarParams) -> bool:
   return not started
+
+def livestream(started: bool, params: Params, CP: car.CarParams) -> bool:
+  return params.get_bool("IsLiveStreaming")
+
+# OpenRivian telemetry-stack gates: master gate (auto-on for Rivian, else honors
+# OpenRivianEnabled) plus per-service toggles. Dependency-free module so it can be
+# unit-tested in isolation.
+from openpilot.selfdrive.openrivian.process_gating import service_enabled
 
 def use_github_runner(started, params, CP: car.CarParams) -> bool:
   return not PC and params.get_bool("EnableGithubRunner") and (
@@ -106,16 +114,19 @@ def or_(*fns):
 def and_(*fns):
   return lambda *args: operator.and_(*(fn(*args) for fn in fns))
 
+def not_(*fns):
+  return lambda *args: operator.not_(*(fn(*args) for fn in fns))
+
 procs = [
   DaemonProcess("manage_athenad", "system.athena.manage_athenad", "AthenadPid"),
 
   NativeProcess("loggerd", "system/loggerd", ["./loggerd"], logging),
   NativeProcess("encoderd", "system/loggerd", ["./encoderd"], only_onroad),
-  NativeProcess("stream_encoderd", "system/loggerd", ["./encoderd", "--stream"], notcar),
+  NativeProcess("stream_encoderd", "system/loggerd", ["./encoderd", "--stream"], or_(and_(livestream, not_(iscar)), notcar)),
   PythonProcess("logmessaged", "system.logmessaged", always_run),
 
-  NativeProcess("camerad", "system/camerad", ["./camerad"], driverview, enabled=not WEBCAM),
-  PythonProcess("webcamerad", "tools.webcam.camerad", driverview, enabled=WEBCAM),
+  NativeProcess("camerad", "system/camerad", ["./camerad"], or_(driverview, livestream), enabled=not WEBCAM),
+  PythonProcess("webcamerad", "system.camerad.webcam.camerad", driverview, enabled=WEBCAM),
   PythonProcess("proclogd", "system.proclogd", only_onroad, enabled=platform.system() != "Darwin"),
   PythonProcess("journald", "system.journald", only_onroad, platform.system() != "Darwin"),
   PythonProcess("micd", "system.micd", iscar),
@@ -148,6 +159,7 @@ procs = [
   PythonProcess("lateral_maneuversd", "tools.lateral_maneuvers.lateral_maneuversd", lat_maneuver),
   PythonProcess("radard", "selfdrive.controls.radard", only_onroad),
   PythonProcess("hardwared", "system.hardware.hardwared", always_run),
+  PythonProcess("modem", "common.hardware.tici.modem", always_run, enabled=TICI),
   PythonProcess("tombstoned", "system.tombstoned", always_run, enabled=not PC),
   PythonProcess("updated", "system.updated.updated", only_offroad, enabled=not PC),
   PythonProcess("uploader", "system.loggerd.uploader", uploader_ready),
@@ -156,8 +168,9 @@ procs = [
 
   # debug procs
   NativeProcess("bridge", "cereal/messaging", ["./bridge"], notcar),
-  PythonProcess("webrtcd", "system.webrtc.webrtcd", notcar),  # OpenRivian: keep webrtcd OFF onroad (WebRTC is heavy). OpenRivian telemetry daemons below stay always_run for onroad MQTT.
-  PythonProcess("webjoystick", "tools.bodyteleop.web", notcar),
+  # webrtcd: upstream gate already keeps it OFF onroad in a car (livestream is an
+  # explicit, offroad-cleared param) -- required so it can never starve the stack.
+  PythonProcess("webrtcd", "system.webrtc.webrtcd", or_(and_(livestream, not_(iscar)), notcar)),
   PythonProcess("joystick", "tools.joystick.joystick_control", and_(joystick, iscar)),
 
   # sunnylink <3
@@ -182,12 +195,15 @@ procs += [
   # locationd
   NativeProcess("locationd_llk", "sunnypilot/selfdrive/locationd", ["./locationd"], only_onroad),
 
-  # OpenRivian
-  PythonProcess("openriviand", "selfdrive.openrivian.api.openriviand", always_run),
-  PythonProcess("mqttd", "selfdrive.openrivian.mqttd", always_run),
-  PythonProcess("cereal2mqtt", "selfdrive.openrivian.cereal2mqtt", always_run),
-  PythonProcess("mqtt2params", "selfdrive.openrivian.mqtt2params", always_run),
-  PythonProcess("webd", "selfdrive.openrivian.webd", always_run),
+  # OpenRivian telemetry stack. Each daemon is gated by the shared master gate AND its
+  # own per-service toggle (OpenRivian<Svc>Disabled) so any one can be disabled
+  # independently for isolation/testing. This block is identical across the OpenRivian
+  # feature branches so they merge without conflict.
+  PythonProcess("openriviand", "selfdrive.openrivian.api.openriviand", service_enabled("openriviand")),
+  PythonProcess("mqttd", "selfdrive.openrivian.mqttd", service_enabled("mqttd")),
+  PythonProcess("cereal2mqtt", "selfdrive.openrivian.cereal2mqtt", service_enabled("cereal2mqtt")),
+  PythonProcess("mqtt2params", "selfdrive.openrivian.mqtt2params", service_enabled("mqtt2params")),
+  PythonProcess("webd", "selfdrive.openrivian.webd", service_enabled("webd")),
 ]
 
 if os.path.exists("./github_runner.sh"):

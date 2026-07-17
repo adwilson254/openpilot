@@ -5,8 +5,8 @@
 
 #include "common/swaglog.h"
 #include "common/util.h"
-#include "system/hardware/hw.h"
-#include "third_party/raylib/include/raylib.h"
+#include "common/hardware/hw.h"
+#include "raylib.h"
 
 int freshClone();
 int cachedFetch(const std::string &cache);

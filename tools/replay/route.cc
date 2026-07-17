@@ -4,8 +4,8 @@
 #include <filesystem>
 #include <regex>
 
-#include "third_party/json11/json11.hpp"
-#include "system/hardware/hw.h"
+#include "json11/json11.hpp"
+#include "common/hardware/hw.h"
 #include "tools/replay/py_downloader.h"
 #include "tools/replay/replay.h"
 #include "tools/replay/util.h"
