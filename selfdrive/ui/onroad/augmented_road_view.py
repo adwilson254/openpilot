@@ -1,7 +1,6 @@
-import time
 import numpy as np
 import pyray as rl
-from cereal import log, messaging
+from cereal import log
 from msgq.visionipc import VisionStreamType
 from openpilot.selfdrive.ui import UI_BORDER_SIZE
 from openpilot.selfdrive.ui.ui_state import ui_state, UIStatus
@@ -58,12 +57,8 @@ class AugmentedRoadView(CameraView, AugmentedRoadViewSP):
     self.alert_renderer = AlertRenderer()
     self.driver_state_renderer = DriverStateRenderer()
 
-    # debug
-    self._pm = messaging.PubMaster(['uiDebug'])
-
   def _render(self, rect):
     # Only render when system is started to avoid invalid data access
-    start_draw = time.monotonic()
     if not ui_state.started:
       return
 
@@ -90,7 +85,7 @@ class AugmentedRoadView(CameraView, AugmentedRoadViewSP):
     )
 
     # Render the base camera view
-    super()._render(rect)
+    super()._render(self._content_rect)
 
     # Draw all UI overlays
     self.model_renderer.render(self._content_rect)
@@ -107,11 +102,6 @@ class AugmentedRoadView(CameraView, AugmentedRoadViewSP):
 
     # Draw colored border based on driving state
     self._draw_border(rect)
-
-    # publish uiDebug
-    msg = messaging.new_message('uiDebug')
-    msg.uiDebug.drawTimeMillis = (time.monotonic() - start_draw) * 1000
-    self._pm.send('uiDebug', msg)
 
   def _handle_mouse_press(self, _):
     if not self._hud_renderer.user_interacting() and self._click_callback is not None:
@@ -195,10 +185,13 @@ class AugmentedRoadView(CameraView, AugmentedRoadViewSP):
     w, h = self._content_rect.width, self._content_rect.height
     cx, cy = intrinsic[0, 2], intrinsic[1, 2]
 
+    # Ensure zoom views the whole area
+    zoom = max(zoom, w / (2 * cx), h / (2 * cy))
+
     # Calculate max allowed offsets with margins
     margin = 5
-    max_x_offset = cx * zoom - w / 2 - margin
-    max_y_offset = cy * zoom - h / 2 - margin
+    max_x_offset = max(0.0, cx * zoom - w / 2 - margin)
+    max_y_offset = max(0.0, cy * zoom - h / 2 - margin)
 
     # Calculate and clamp offsets to prevent out-of-bounds issues
     try:

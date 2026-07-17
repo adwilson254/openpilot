@@ -14,7 +14,7 @@ from openpilot.common.constants import CV
 from openpilot.selfdrive.ui.onroad.hud_renderer import UI_CONFIG
 from openpilot.selfdrive.ui.ui_state import ui_state
 from openpilot.sunnypilot.selfdrive.controls.lib.speed_limit.common import Mode as SpeedLimitMode
-from openpilot.system.hardware import HARDWARE
+from openpilot.common.hardware import HARDWARE
 from openpilot.system.ui.lib.application import gui_app, FontWeight
 from openpilot.system.ui.lib.multilang import tr
 from openpilot.system.ui.lib.text_measure import measure_text_cached
@@ -75,7 +75,7 @@ class SpeedLimitAlertRenderer:
       speed_limit_final_last = ui_state.sm['longitudinalPlanSP'].speedLimit.resolver.speedLimitFinalLast
 
       v_cruise_cluster = ui_state.sm['carState'].vCruiseCluster
-      set_speed = ui_state.sm['controlsState'].vCruiseDEPRECATED if v_cruise_cluster == 0.0 else v_cruise_cluster
+      set_speed = ui_state.sm['controlsState'].deprecated.vCruise if v_cruise_cluster == 0.0 else v_cruise_cluster
       if not ui_state.is_metric:
         set_speed *= KM_TO_MILE
 
@@ -164,7 +164,7 @@ class SpeedLimitRenderer(Widget, SpeedLimitAlertRenderer):
 
     v_cruise_cluster = car_state.vCruiseCluster
     self.set_speed = (
-      controls_state.vCruiseDEPRECATED if v_cruise_cluster == 0.0 else v_cruise_cluster
+      controls_state.deprecated.vCruise if v_cruise_cluster == 0.0 else v_cruise_cluster
     )
     self.is_cruise_set = 0 < self.set_speed < SET_SPEED_NA
     self.is_cruise_available = self.set_speed != -1

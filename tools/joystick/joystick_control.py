@@ -8,7 +8,7 @@ from inputs import UnpluggedError, get_gamepad
 from cereal import messaging
 from openpilot.common.params import Params
 from openpilot.common.realtime import Ratekeeper
-from openpilot.system.hardware import HARDWARE
+from openpilot.common.hardware import HARDWARE
 from openpilot.tools.lib.kbhit import KBHit
 
 EXPO = 0.4
@@ -110,7 +110,7 @@ def send_thread(joystick):
 
 
 def joystick_control_thread(joystick):
-  Params().put_bool('JoystickDebugMode', True)
+  Params().put_bool('JoystickDebugMode', True, block=True)
   threading.Thread(target=send_thread, args=(joystick,), daemon=True).start()
   while True:
     joystick.update()

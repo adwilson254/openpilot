@@ -13,7 +13,7 @@ from typing import NoReturn
 
 from cereal import log, car
 import cereal.messaging as messaging
-from openpilot.system.hardware import HARDWARE
+from openpilot.common.hardware import HARDWARE
 from openpilot.common.constants import CV
 from openpilot.common.params import Params
 from openpilot.common.realtime import config_realtime_process
@@ -167,7 +167,7 @@ class Calibrator:
 
     write_this_cycle = (self.idx == 0) and (self.block_idx % (INPUTS_WANTED//5) == 5)
     if self.param_put and write_this_cycle:
-      self.params.put_nonblocking("CalibrationParams", self.get_msg(True).to_bytes())
+      self.params.put("CalibrationParams", self.get_msg(True).to_bytes())
 
   def handle_v_ego(self, v_ego: float) -> None:
     self.v_ego = v_ego

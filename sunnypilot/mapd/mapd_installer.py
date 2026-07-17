@@ -16,7 +16,7 @@ from urllib.request import urlopen
 
 from cereal import messaging
 from openpilot.common.params import Params
-from openpilot.system.hardware.hw import Paths
+from openpilot.common.hardware.hw import Paths
 from openpilot.common.spinner import Spinner
 from openpilot.system.version import is_prebuilt
 from openpilot.sunnypilot.mapd import MAPD_PATH, MAPD_BIN_DIR
@@ -30,7 +30,7 @@ def update_installed_version(version: str, params: Params = None) -> None:
   if params is None:
     params = Params()
 
-  params.put("MapdVersion", version)
+  params.put("MapdVersion", version, block=True)
 
 
 class MapdInstallManager:

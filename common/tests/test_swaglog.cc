@@ -6,8 +6,8 @@
 #include "common/swaglog.h"
 #include "common/util.h"
 #include "common/version.h"
-#include "system/hardware/hw.h"
-#include "third_party/json11/json11.hpp"
+#include "common/hardware/hw.h"
+#include "json11/json11.hpp"
 
 #include "sunnypilot/common/version.h"
 

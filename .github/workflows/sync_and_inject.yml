@@ -17,6 +17,13 @@ jobs:
         with:
           ref: clean
           fetch-depth: 0
+          # Upstream (apdev/dev) now ships .github/workflows/ files that flow into
+          # clean/dev-test. The default GITHUB_TOKEN is NOT allowed to push commits that
+          # add/modify workflow files, so pushing clean/dev-test fails once those land.
+          # Use a PAT with the `workflow` scope (repo secret SYNC_PAT); fall back to
+          # GITHUB_TOKEN when it isn't set (works only while no workflow files change).
+          token: ${{ secrets.SYNC_PAT || secrets.GITHUB_TOKEN }}
+          persist-credentials: true
           
       - name: Setup Git User
         run: |
@@ -25,9 +32,10 @@ jobs:
 
       - name: Fetch Upstream
         run: |
-          # Upstream is the adventurepilotdev/ap-dev repo. The active upstream branch was
-          # renamed ap-dev -> dev (repo name is unchanged), so we track the 'dev' branch.
-          git remote add upstream https://github.com/adventurepilotdev/ap-dev.git
+          # Upstream repo was renamed: ap-dev -> AdventurePilotDev/AdventurePilot, and its
+          # active branch ap-dev -> dev. Old URLs (ap-dev, openpilot) still redirect, but
+          # track the canonical name so a future rename of the redirect doesn't break us.
+          git remote add upstream https://github.com/adventurepilotdev/adventurepilot.git
           git fetch upstream dev
           
       - name: Sync clean branch (fast-forward, else open PR)
@@ -42,7 +50,7 @@ jobs:
             echo "::warning::clean cannot fast-forward to upstream/dev (upstream diverged). Opening a sync PR instead of silently skipping."
             BRANCH="sync/dev-$(date +%Y%m%d)"
             git branch -f "$BRANCH" upstream/dev
-            git push -f origin "$BRANCH"
+            git push --no-verify -f origin "$BRANCH"
             gh pr create --base clean --head "$BRANCH" \
               --title "Nightly sync: dev -> clean ($(date +%Y-%m-%d))" \
               --body "Automated fast-forward sync failed because upstream/dev diverged from clean. Review and merge this PR to bring clean current. dev-test injection/push was skipped for this run." \
@@ -50,22 +58,45 @@ jobs:
             echo "synced=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # Push clean as soon as the fast-forward succeeds, BEFORE touching dev-test.
+      # This decouples the (safe, always-fast-forward) clean sync from the dev-test
+      # injection, which can conflict. Previously the single "Push branches" step ran
+      # after injection, so a dev-test merge conflict discarded a good clean sync and
+      # left clean stuck behind upstream.
+      - name: Push clean
+        # --no-verify skips the git-lfs pre-push hook. The repo's LFS objects live on an
+        # upstream LFS remote this fork can't push to ("Host key verification failed"),
+        # and clean only mirrors upstream, so we push commits/pointers without LFS upload.
+        if: steps.sync.outputs.synced == 'true'
+        run: git push --no-verify origin clean
+
       - name: Inject into dev-test branch
         if: steps.sync.outputs.synced == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Checkout dev-test
+          # Merge the freshly-synced clean into dev-test, then run the injection.
           git checkout dev-test || git checkout -b dev-test
-          git merge clean -m "Merge clean into dev-test"
-          
-          # Run the Python injection script
-          python3 selfdrive/ui/openrivian/scripts/inject.py
-          
-          # Add any injected changes and commit
-          git add system/ui/spinner.py
-          git diff --staged --quiet || git commit -m "[bot] Inject OpenRivian hooks"
+          if git merge --no-edit clean; then
+            # Run the Python injection script
+            python3 selfdrive/ui/openrivian/scripts/inject.py
 
-      - name: Push branches
-        if: steps.sync.outputs.synced == 'true'
-        run: |
-          git push origin clean
-          git push origin dev-test
+            # Add any injected changes and commit
+            git add system/ui/spinner.py
+            git diff --staged --quiet || git commit -m "[bot] Inject OpenRivian hooks"
+
+            git push --no-verify origin dev-test
+          else
+            # Conflicts (e.g. pyproject.toml / uv.lock when clean jumps forward): don't
+            # fail the job or leave a broken merge. clean is already pushed above; open a
+            # PR so the dev-test reconciliation can be done by hand.
+            git merge --abort
+            echo "::warning::clean->dev-test merge has conflicts; opening a PR for manual resolution."
+            BRANCH="sync/dev-test-$(date +%Y%m%d)"
+            git branch -f "$BRANCH" clean
+            git push --no-verify -f origin "$BRANCH"
+            gh pr create --base dev-test --head "$BRANCH" \
+              --title "Sync clean -> dev-test ($(date +%Y-%m-%d))" \
+              --body "Automated clean->dev-test merge hit conflicts (e.g. pyproject.toml / uv.lock). Resolve and merge; OpenRivian injection was skipped this run." \
+              || echo "A dev-test sync PR may already exist; leaving it in place."
+          fi

@@ -7,7 +7,7 @@ import time
 from setproctitle import getproctitle
 
 from openpilot.common.utils import MovingAverage
-from openpilot.system.hardware import PC
+from openpilot.common.hardware import PC
 
 
 # time step for each process
@@ -26,6 +26,11 @@ class Priority:
   # CORE 3
   # - pandad = 55
   CTRL_HIGH = 53
+
+
+def drop_realtime() -> None:
+  if sys.platform == 'linux' and not PC:
+    os.sched_setscheduler(0, os.SCHED_OTHER, os.sched_param(0))
 
 
 def set_core_affinity(cores: list[int]) -> None:
