@@ -40,6 +40,18 @@ export const T = {
   lon: 'openrivian/vehicle/location/longitude',
   alt: 'openrivian/vehicle/location/altitude',
   bearing: 'openrivian/vehicle/location/bearing',
+  accelX: 'openrivian/vehicle/dynamics/accel_x',
+  accelY: 'openrivian/vehicle/dynamics/accel_y',
+  accelZ: 'openrivian/vehicle/dynamics/accel_z',
+  // health canaries (cereal2mqtt)
+  healthAlive: 'openrivian/health/telemetry_alive',
+  healthDemoted: 'openrivian/health/sched_demoted',
+  healthNiceMax: 'openrivian/health/sched_nice_max',
+  healthCommIssue: 'openrivian/health/comm_issue',
+  // energy via the Rivian cloud API (openriviand)
+  energySoc: 'openrivian/energy/soc_percent',
+  energyRange: 'openrivian/energy/range_miles',
+  energyCharger: 'openrivian/energy/charger_state',
 };
 
 export const fmt = (v, digits = 0, dash = '—') =>

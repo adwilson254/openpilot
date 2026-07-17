@@ -3,18 +3,27 @@ import { useTelemetry } from '../lib/mqtt';
 import settingsUISchema from '../assets/settings_ui.json';
 import paramsMetadata from '../assets/params_metadata.json';
 
-function Item({ item, value, onSet }) {
+/* READ-ONLY view of the car's settings.
+   The telemetry pipeline is one-way by design: mqtt2params publishes param values
+   to openrivian/settings/status/# and has NO write path (the MQTT param-write
+   handler was removed so a stray broker message can never alter persistent vehicle
+   state). Settings are changed on the car's own screen; this tab just shows them. */
+
+function Item({ item, value }) {
   const meta = paramsMetadata[item.key] || {};
   if (item.widget === 'toggle') {
     const on = value === true || value === 1 || value === '1';
+    const known = value !== undefined && value !== null;
     return (
       <div className="setting-row">
         <div>
           <div className="setting-title">{item.title}</div>
           {item.description && <div className="setting-desc">{item.description}</div>}
         </div>
-        <div className={`switch ${on ? 'on' : ''}`} role="switch" aria-checked={on}
-             onClick={() => onSet(item.key, !on)}><i /></div>
+        <span className="badge" aria-label={`${item.title}: ${known ? (on ? 'on' : 'off') : 'unknown'}`}>
+          <span className="dot" style={{ background: known ? (on ? 'var(--teal)' : 'var(--text-faint)') : 'var(--text-faint)' }} />
+          {known ? (on ? 'ON' : 'OFF') : '—'}
+        </span>
       </div>
     );
   }
@@ -29,8 +38,8 @@ function Item({ item, value, onSet }) {
         </div>
         <div className="row">
           {options.map((opt) => (
-            <button key={opt.value} className={`opt-btn ${value === opt.value ? 'sel' : ''}`}
-                    onClick={() => onSet(item.key, opt.value)}>{opt.label || opt.value}</button>
+            <span key={opt.value} className={`opt-btn ${value === opt.value ? 'sel' : ''}`}
+                  style={{ cursor: 'default' }} aria-disabled="true">{opt.label || opt.value}</span>
           ))}
         </div>
       </div>
@@ -45,10 +54,14 @@ export default function Settings() {
   const [active, setActive] = useState(panels[0]?.id);
   const panel = panels.find((p) => p.id === active);
   const val = (key) => t.get(`openrivian/settings/status/${key}`);
-  const onSet = (key, value) => t.publishSetting(key, value);
 
   return (
     <div>
+      <div className="card" style={{ marginBottom: 16, padding: '10px 14px' }}>
+        <span style={{ color: 'var(--text-faint)', fontSize: 13 }}>
+          Read-only — these values mirror the car. Change settings from the car's screen.
+        </span>
+      </div>
       <div className="row" style={{ marginBottom: 16, overflowX: 'auto', paddingBottom: 4 }}>
         {panels.map((p) => (
           <button key={p.id} className={`opt-btn ${active === p.id ? 'sel' : ''}`} onClick={() => setActive(p.id)}>
@@ -65,7 +78,7 @@ export default function Settings() {
             <div key={sec.id} style={{ marginTop: 18 }}>
               {sec.title && <div style={{ fontWeight: 800, color: 'var(--yellow)', fontSize: 13, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 4 }}>{sec.title}</div>}
               {(sec.items || []).filter((i) => i.key).map((i) => (
-                <Item key={i.key} item={i} value={val(i.key)} onSet={onSet} />
+                <Item key={i.key} item={i} value={val(i.key)} />
               ))}
             </div>
           ))}

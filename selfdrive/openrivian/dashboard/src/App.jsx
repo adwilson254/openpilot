@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import './theme.css';
-import { useTelemetry } from './lib/mqtt';
+import { useTelemetry, ALIVE_TOPIC } from './lib/mqtt';
 import { usePrefs } from './lib/prefs';
 import Alerts from './components/Alerts';
 import Drive from './views/Drive';
@@ -37,13 +37,21 @@ function initialTab() {
 }
 
 function ConnBadge() {
-  const { status } = useTelemetry();
+  const t = useTelemetry();
+  const { status } = t;
   if (status === 'sim') return <span className="badge"><span className="dot" style={{ background: 'var(--yellow)' }} /> Simulated</span>;
-  const live = status === 'live';
+  // Connected to the broker, but is the telemetry BRIDGE alive? The broker holds a
+  // retained Last-Will flag for us: false means cereal2mqtt died even though the
+  // broker (and its retained state topics) are still up.
+  const bridgeAlive = t.get(ALIVE_TOPIC);
+  const live = status === 'live' && bridgeAlive !== false;
+  const label = status === 'connecting' ? 'Connecting…'
+    : status !== 'live' ? 'Offline'
+    : bridgeAlive === false ? 'Bridge down' : 'Live';
   return (
     <span className="badge">
       <span className={`dot ${live ? 'live' : 'off'}`} />
-      {live ? 'Live' : status === 'connecting' ? 'Connecting…' : 'Offline'}
+      {label}
     </span>
   );
 }

@@ -112,6 +112,10 @@ def main():
     
     class ThreadingHTTPServer(socketserver.ThreadingMixIn, socketserver.TCPServer):
         daemon_threads = True
+        # Without SO_REUSEADDR a restart (manager cycle or the disable/enable toggle)
+        # can hit "Address already in use" while the old socket sits in TIME_WAIT,
+        # crash-looping the daemon until the kernel releases the port.
+        allow_reuse_address = True
 
     with ThreadingHTTPServer(("", PORT), SPAHandler) as httpd:
         logging.info(f"[+] OpenRivian Web Dashboard serving at port {PORT}")

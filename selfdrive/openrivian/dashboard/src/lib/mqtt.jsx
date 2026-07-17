@@ -1,5 +1,5 @@
 /* The telemetry store keeps a ref-backed ring buffer of recent values for sparklines.
-   It is intentionally read during render (the provider re-renders on every message, so
+   It is intentionally read during render (the provider re-renders on every flush, so
    the buffer is always current), and this module deliberately exports both the provider
    and its hook — the lint rule below is noise for this pattern. */
 /* eslint-disable react-refresh/only-export-components */
@@ -11,6 +11,16 @@ const TelemetryContext = createContext(null);
 
 const HISTORY_LEN = 90;   // samples kept per topic for sparklines
 const STALE_MS = 5000;    // older than this => considered stale
+const FLUSH_MS = 100;     // batch window: MQTT messages are buffered and applied to
+                          // React state at most once per FLUSH_MS. High-rate topics
+                          // arrive at 20 Hz x several topics; one setState per message
+                          // was a re-render storm (every consumer re-rendered per
+                          // message). 10 fps state flushes keep the UI fluid and cheap.
+
+// Broker liveness contract (cereal2mqtt): retained flag the broker force-publishes
+// to false (MQTT Last Will) if the telemetry bridge dies. Without it, retained
+// state topics make a dead feed look alive to a late-connecting dashboard.
+export const ALIVE_TOPIC = 'openrivian/health/telemetry_alive';
 
 function resolveHost() {
   const p = new URLSearchParams(window.location.search).get('host');
@@ -59,13 +69,27 @@ export function TelemetryProvider({ children }) {
 
     let active = true;
     let timer = null;
+    let flushTimer = null;
+    const pending = {}; // topic -> { value, ts } accumulated since the last flush
+
+    const flush = () => {
+      const keys = Object.keys(pending);
+      if (!keys.length) return;
+      const batch = {};
+      for (const k of keys) {
+        batch[k] = pending[k];
+        delete pending[k];
+      }
+      setSignals((prev) => ({ ...prev, ...batch }));
+    };
 
     const onMessage = (msg) => {
       let value;
       try { value = JSON.parse(msg.payloadString).value; }
       catch { value = msg.payloadString; }
       const topic = msg.destinationName;
-      setSignals((prev) => ({ ...prev, [topic]: { value, ts: Date.now() } }));
+      pending[topic] = { value, ts: Date.now() };
+      // History gets every sample (sparklines stay full-rate); React state is batched.
       if (typeof value === 'number') {
         const h = histRef.current[topic] || (histRef.current[topic] = []);
         h.push(value);
@@ -74,7 +98,7 @@ export function TelemetryProvider({ children }) {
     };
 
     const scheduleReconnect = () => {
-      if (active) timer = setTimeout(connect, 2500); // auto-reconnect (was missing before)
+      if (active) timer = setTimeout(connect, 2500); // auto-reconnect
     };
 
     function connect() {
@@ -90,32 +114,23 @@ export function TelemetryProvider({ children }) {
     }
 
     connect();
+    flushTimer = setInterval(flush, FLUSH_MS);
     return () => {
       active = false;
       clearTimeout(timer);
+      clearInterval(flushTimer);
       try { if (clientRef.current?.isConnected()) clientRef.current.disconnect(); } catch { /* noop */ }
     };
   }, []);
 
-  const publish = useCallback((topic, obj) => {
-    // Hard safety guard: in demo/sim mode we never emit to a broker, so a simulated
-    // engaged state or a settings toggle can never reach a real vehicle.
-    if (simEnabled()) return false;
-    const c = clientRef.current;
-    if (!c || !c.isConnected()) return false;
-    const m = new Paho.Message(JSON.stringify(obj));
-    m.destinationName = topic;
-    c.send(m);
-    return true;
-  }, []);
-
-  const publishSetting = useCallback((key, value) => publish(`openrivian/settings/set/${key}`, { value }), [publish]);
+  // NOTE: there is intentionally no publish API here. The telemetry pipeline is
+  // one-way: mqtt2params is read-only (its MQTT write path was removed so a stray
+  // broker message can never alter persistent vehicle state), so a dashboard
+  // publish would just vanish. Settings render read-only instead.
 
   const api = {
     signals,
     status,
-    publish,
-    publishSetting,
     get: (topic, fallback = undefined) => (signals[topic] ? signals[topic].value : fallback),
     getHistory: (topic) => histRef.current[topic] || [],
     fresh: (topic) => signals[topic] && Date.now() - signals[topic].ts < STALE_MS,

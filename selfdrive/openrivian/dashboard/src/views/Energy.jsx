@@ -15,17 +15,21 @@ export default function Energy() {
         <Ring value={soc} label="State of Charge" tone={charging ? 'var(--teal)' : 'var(--yellow)'} size={240} />
         <StatusChip on={charging} labelOn="CHARGING" labelOff="NOT CHARGING" />
       </div>
-      <Tile label="Pack Voltage (12V)" value={fmt(t.get(T.voltage), 1)} unit=" V" />
+      <Tile label="Battery (Rivian Cloud)" value={fmt(t.get(T.energySoc), 0)} unit=" %" />
+      <Tile label="Range (Rivian Cloud)" value={fmt(t.get(T.energyRange), 0)} unit=" mi" />
+      <Tile label="Charger" value={t.get(T.energyCharger, '—')} />
+      <Tile label="12V Battery" value={fmt(t.get(T.voltage), 1)} unit=" V" />
       <Tile label="Device Power Draw" value={fmt(t.get(T.powerDraw), 1)} unit=" W" />
       <Tile label="Ignition" value={bool(t.get(T.ignition)) ? 'ON' : 'OFF'} tone={bool(t.get(T.ignition)) ? 'teal' : 'dim'} />
       <Tile label="Speed" value={fmt(sp.v, 0)} unit={` ${sp.u}`} />
 
       <div className="card" style={{ gridColumn: '1 / -1' }}>
-        <h2>Not yet wired</h2>
+        <h2>Sources</h2>
         <p style={{ color: 'var(--text-faint)', fontSize: 14, margin: 0 }}>
-          Charge rate and range estimate aren't published yet — SOC/charging depend on the
-          Rivian car port decoding them, and charge rate is the diagnosed <code>0x550</code> signal.
-          These tiles light up automatically once <code>cereal2mqtt</code> publishes them.
+          The big ring uses the CAN-decoded state of charge when the car port publishes it.
+          Battery/Range/Charger tiles come from the Rivian cloud API via <code>openriviand</code>
+          (updates about once a minute when logged in — log in from the car's OpenRivian settings
+          panel). Charge rate from CAN (<code>0x550</code>) is still to be decoded.
         </p>
       </div>
     </div>

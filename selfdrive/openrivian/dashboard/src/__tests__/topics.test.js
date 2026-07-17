@@ -21,11 +21,12 @@ describe('topic contract (UI <-> cereal2mqtt)', () => {
     expect(orphans, `UI reads topics the daemon never publishes:\n${orphans.join('\n')}`).toEqual([]);
   });
 
-  it('daemon topics not consumed by the UI are only the known extras', () => {
-    // Informational guard: surfaces daemon topics the UI ignores so the drift is
-    // visible. engine_rpm is intentionally published but unused by the dashboard.
+  it('every daemon topic is consumed by the UI (T-map has no blind spots)', () => {
+    // engine_rpm (the one known extra) was removed from the daemon: it read a
+    // deprecated field that is meaningless on an EV. The sets now match exactly;
+    // if the daemon grows a topic the UI doesn't know, this surfaces it.
     const consumed = new Set(Object.values(T));
     const unused = [...DAEMON].filter((t) => !consumed.has(t));
-    expect(unused).toEqual(['openrivian/vehicle/powertrain/engine_rpm']);
+    expect(unused).toEqual([]);
   });
 });
