@@ -17,7 +17,7 @@ from openpilot.common.realtime import Ratekeeper, config_realtime_process
 from openpilot.common.swaglog import cloudlog
 from openpilot.selfdrive.selfdrived.alertmanager import set_offroad_alert
 from openpilot.sunnypilot.mapd.live_map_data.osm_map_data import OsmMapData
-from openpilot.system.hardware.hw import Paths
+from openpilot.common.hardware.hw import Paths
 from openpilot.sunnypilot.mapd import MAPD_PATH
 from openpilot.sunnypilot.mapd.mapd_installer import VERSION, update_installed_version
 
@@ -56,8 +56,8 @@ def cleanup_old_osm_data(files_to_remove: list[str]) -> None:
 
 
 def request_refresh_osm_location_data(nations: list[str], states: list[str] | None = None) -> None:
-  params.put("OsmDownloadedDate", str(datetime.now().timestamp()))
-  params.put_bool("OsmDbUpdatesCheck", False)
+  params.put("OsmDownloadedDate", str(datetime.now().timestamp()), block=True)
+  params.put_bool("OsmDbUpdatesCheck", False, block=True)
 
   osm_download_locations = {
     "nations": nations,
@@ -65,7 +65,7 @@ def request_refresh_osm_location_data(nations: list[str], states: list[str] | No
   }
 
   print(f"Downloading maps for {json.dumps(osm_download_locations)}")
-  mem_params.put("OSMDownloadLocations", osm_download_locations)
+  mem_params.put("OSMDownloadLocations", osm_download_locations, block=True)
 
 
 def filter_nations_and_states(nations: list[str], states: list[str] | None = None) -> tuple[list[str], list[str]]:
@@ -106,10 +106,10 @@ def update_osm_db() -> None:
     request_refresh_osm_location_data(filtered_nations, filtered_states)
 
   if not mem_params.get("OSMDownloadBounds"):
-    mem_params.put("OSMDownloadBounds", "")
+    mem_params.put("OSMDownloadBounds", "", block=True)
 
   if not mem_params.get("LastGPSPosition"):
-    mem_params.put("LastGPSPosition", "{}")
+    mem_params.put("LastGPSPosition", "{}", block=True)
 
 
 def main_thread():

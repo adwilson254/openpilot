@@ -15,7 +15,7 @@
 #include "common/swaglog.h"
 #include "common/timing.h"
 #include "common/util.h"
-#include "system/hardware/hw.h"
+#include "common/hardware/hw.h"
 
 #define MAX_IR_PANDA_VAL 50
 #define CUTOFF_IL 400
@@ -249,6 +249,11 @@ std::optional<bool> send_panda_states(PubMaster *pm, Panda *panda, bool is_onroa
 }
 
 void send_peripheral_state(Panda *panda, PubMaster *pm) {
+  auto health_opt = panda->get_state();
+  if (!health_opt) {
+    return;
+  }
+
   // build msg
   MessageBuilder msg;
   auto evt = msg.initEvent();
@@ -257,23 +262,9 @@ void send_peripheral_state(Panda *panda, PubMaster *pm) {
   auto ps = evt.initPeripheralState();
   ps.setPandaType(panda->hw_type);
 
-  double read_time = millis_since_boot();
-  ps.setVoltage(Hardware::get_voltage());
-  ps.setCurrent(Hardware::get_current());
-  read_time = millis_since_boot() - read_time;
-  if (read_time > 50) {
-    LOGW("reading hwmon took %lfms", read_time);
-  }
-
-  // fall back to panda's voltage and current measurement
-  if (ps.getVoltage() == 0 && ps.getCurrent() == 0) {
-    auto health_opt = panda->get_state();
-    if (health_opt) {
-      health_t health = *health_opt;
-      ps.setVoltage(health.voltage_pkt);
-      ps.setCurrent(health.current_pkt);
-    }
-  }
+  health_t health = *health_opt;
+  ps.setVoltage(health.voltage_pkt);
+  ps.setCurrent(health.current_pkt);
 
   uint16_t fan_speed_rpm = panda->get_fan_speed();
   ps.setFanSpeedRpm(fan_speed_rpm);
@@ -385,12 +376,11 @@ void pandad_run(Panda *panda) {
   const bool spoofing_started = getenv("STARTED") != nullptr;
   const bool fake_send = getenv("FAKESEND") != nullptr;
 
-  // Start the CAN send thread
+  // Start helper thread for event-driven sendcan.
   std::thread send_thread(can_send_thread, panda, fake_send);
 
-  Params params;
   RateKeeper rk("pandad", 100);
-  SubMaster sm({"selfdriveState", "selfdriveStateSP"});
+  SubMaster sm({"selfdriveState", "deviceState", "selfdriveStateSP"});
   PubMaster pm({"can", "pandaStates", "peripheralState"});
   PandaSafety panda_safety(panda);
   bool engaged = false;
@@ -398,7 +388,7 @@ void pandad_run(Panda *panda) {
   bool is_onroad = false;
   bool always_offroad = false;
 
-  // Main loop: receive CAN data and process states
+  // Main loop: receive CAN first, then process lower priority panda and peripheral state.
   while (!do_exit && check_connected(panda)) {
     can_recv(panda, &pm);
 
@@ -411,8 +401,10 @@ void pandad_run(Panda *panda) {
     if (rk.frame() % 10 == 0) {
       sm.update(0);
       engaged = sm.allAliveAndValid({"selfdriveState"}) && sm["selfdriveState"].getSelfdriveState().getEnabled();
+      if (sm.updated("deviceState")) {
+        is_onroad = sm["deviceState"].getDeviceState().getStarted();
+      }
       engaged_mads = process_mads_heartbeat(&sm);
-      is_onroad = params.getBool("IsOnroad");
       always_offroad = panda_safety.getOffroadMode();
       process_panda_state(panda, &pm, engaged, engaged_mads, is_onroad, spoofing_started, always_offroad);
       panda_safety.configureSafetyMode(is_onroad);

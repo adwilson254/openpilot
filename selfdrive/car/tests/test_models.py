@@ -21,12 +21,20 @@ from opendbc.safety.tests.libsafety import libsafety_py
 from openpilot.common.basedir import BASEDIR
 from openpilot.selfdrive.pandad import can_capnp_to_list
 from openpilot.selfdrive.test.helpers import read_segment_list
-from openpilot.system.hardware.hw import DEFAULT_DOWNLOAD_CACHE_ROOT
+from openpilot.common.hardware.hw import DEFAULT_DOWNLOAD_CACHE_ROOT
 from openpilot.tools.lib.logreader import LogReader, LogsUnavailable, openpilotci_source, internal_source, comma_api_source
 from openpilot.tools.lib.route import SegmentName
 
 SafetyModel = car.CarParams.SafetyModel
 SteerControlType = structs.CarParams.SteerControlType
+
+# panda safety stores angle_meas in brand-specific CAN units (angle_deg_to_can in opendbc/safety/modes/*.h).
+ANGLE_DEG_TO_CAN = {
+  "tesla": -10,
+  "toyota": 17.452007,
+  "nissan": 100,
+  "psa": 10,
+}
 
 NUM_JOBS = int(os.environ.get("NUM_JOBS", "1"))
 JOB_ID = int(os.environ.get("JOB_ID", "0"))
@@ -184,7 +192,7 @@ class TestCarModelBase(unittest.TestCase):
     # make sure car params are within a valid range
     self.assertGreater(self.CP.mass, 1)
 
-    if self.CP.steerControlType != SteerControlType.angle:
+    if self.CP.steerControlType not in (SteerControlType.angle, SteerControlType.curvature):
       tuning = self.CP.lateralTuning.which()
       if tuning == 'pid':
         self.assertTrue(len(self.CP.lateralTuning.pid.kpV))
@@ -433,10 +441,18 @@ class TestCarModelBase(unittest.TestCase):
         checks['vEgoRaw'] += (v_ego_raw > (self.safety.get_vehicle_speed_max() + 1e-3) or
                               v_ego_raw < (self.safety.get_vehicle_speed_min() - 1e-3))
 
+      # check steering angle for angle control cars (panda stores angle_meas in CAN units)
+      # ford and VW MEB excluded since they track curvature, not steering angle
+      # TODO: add curvature check, standardize CAN units to rm brand specific ANGLE_DEG_TO_CAN
+      if self.CP.steerControlType == SteerControlType.angle and not self.CP.notCar and self.CP.brand not in ("ford", "volkswagen"):
+        angle_can = (CS.steeringAngleDeg + CS.steeringAngleOffsetDeg) * ANGLE_DEG_TO_CAN[self.CP.brand]
+        checks['steeringAngleDeg'] += (angle_can > (self.safety.get_angle_meas_max() + 1) or
+                                       angle_can < (self.safety.get_angle_meas_min() - 1))
+
       # TODO: remove this exception once this mismatch is resolved
       brake_pressed = CS.brakePressed
       if CS.brakePressed and not self.safety.get_brake_pressed_prev():
-        if self.CP.carFingerprint in (HONDA.HONDA_PILOT, HONDA.HONDA_RIDGELINE) and CS.brake > 0.05:
+        if self.CP.carFingerprint in (HONDA.HONDA_PILOT, HONDA.HONDA_RIDGELINE) and CS.brakeDEPRECATED > 0.05:
           brake_pressed = False
       checks['brakePressed'] += brake_pressed != self.safety.get_brake_pressed_prev()
       checks['regenBraking'] += CS.regenBraking != self.safety.get_regen_braking_prev()
