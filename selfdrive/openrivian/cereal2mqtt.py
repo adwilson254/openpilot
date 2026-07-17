@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
+# NOTE: os.nice(19) must only be called inside main(), never at module level.
+# The process manager pre-imports every daemon module inside the manager process
+# (manager_init -> prepare -> importlib.import_module) BEFORE forking children, so a
+# module-level nice() permanently demotes manager and the ENTIRE openpilot stack
+# (root cause of the 2026-07 "TAKE CONTROL IMMEDIATELY / Communication Issue" storms).
+# Guarded by tests/test_no_module_level_nice.py.
 import os
-try:
-    os.nice(19)
-except Exception:
-    pass
-
 import time
 import json
 import logging
@@ -265,6 +266,11 @@ def publish_state(client, sm):
             publish_safely(client, "openrivian/vehicle/location/bearing", llk.calibratedOrientationNED.value[0])
 
 def main():
+    # Low priority for THIS daemon only (safe here: we are in the forked child).
+    try:
+        os.nice(19)
+    except Exception:
+        pass
 
     logging.basicConfig(level=logging.INFO)
     logging.info("[*] Starting Cereal to MQTT Bridge...")

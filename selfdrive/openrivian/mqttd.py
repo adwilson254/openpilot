@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
+# NOTE: os.nice(19) must only be called inside main(), never at module level.
+# The process manager pre-imports every daemon module inside the manager process
+# (manager_init -> prepare -> importlib.import_module) BEFORE forking children, so a
+# module-level nice() permanently demotes manager and the ENTIRE openpilot stack
+# (root cause of the 2026-07 "TAKE CONTROL IMMEDIATELY / Communication Issue" storms).
+# Guarded by tests/test_no_module_level_nice.py.
 import os
-try:
-    os.nice(19)
-except Exception:
-    pass
-
 import asyncio
 import logging
 import sys
@@ -59,6 +60,12 @@ async def run_broker():
         print("[*] MQTT Broker shutdown.")
 
 def main():
+    # Low priority for THIS daemon only (safe here: we are in the forked child).
+    try:
+        os.nice(19)
+    except Exception:
+        pass
+
     if Broker is None:
         logging.error("Missing amqtt. Gracefully exiting mqttd.")
         return
