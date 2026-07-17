@@ -96,3 +96,84 @@ def test_login_with_otp_requires_active_session():
     api = RivianAPI()
     with pytest.raises(Exception):
         api.login_with_otp("123456")
+
+
+# --------------------------------------------------------------------------- #
+# Timeouts: every network call must bound its wait (the mici panel calls this
+# client synchronously on the UI render thread).
+# --------------------------------------------------------------------------- #
+def test_all_posts_carry_a_timeout(monkeypatch):
+    api = RivianAPI()
+    seen = []
+
+    def rec_post(url, json=None, timeout=None, **_k):
+        seen.append(timeout)
+        return FakeResp({"data": {"createCsrfToken": {"csrfToken": "c", "appSessionToken": "a"}}})
+
+    monkeypatch.setattr(api.session, "post", rec_post)
+    api.create_csrf_token()
+    assert seen and all(t is not None for t in seen)
+
+
+def test_source_has_no_timeoutless_posts():
+    # Static guard: any future session.post added without a timeout fails here.
+    import inspect
+    import re
+    from selfdrive.openrivian.api import rivian_api
+    src = inspect.getsource(rivian_api)
+    for call in re.findall(r"session\.post\([^)]*\)", src):
+        assert "timeout" in call, f"session.post without timeout: {call}"
+
+
+# --------------------------------------------------------------------------- #
+# Vehicle state (energy) accessors
+# --------------------------------------------------------------------------- #
+def _vehicle_state_resp(soc=71.5, dte_km=290.0, charger="not_connected"):
+    return FakeResp({"data": {"vehicleState": {
+        "__typename": "VehicleState",
+        "batteryLevel": {"value": soc},
+        "distanceToEmpty": {"value": dte_km},
+        "chargerState": {"value": charger},
+    }}})
+
+
+def test_get_vehicle_state_parses_timestamped_fields(monkeypatch):
+    api = _api_with_tokens("tok")
+    monkeypatch.setattr(api.session, "post", lambda *a, **k: _vehicle_state_resp())
+    out = api.get_vehicle_state("veh-1")
+    assert out["soc_percent"] == 71.5
+    assert out["range_miles"] == round(290.0 * 0.621371, 1)
+    assert out["charger_state"] == "not_connected"
+
+
+def test_get_vehicle_state_accepts_raw_scalars(monkeypatch):
+    api = _api_with_tokens("tok")
+    resp = FakeResp({"data": {"vehicleState": {
+        "batteryLevel": 55.0, "distanceToEmpty": 100.0, "chargerState": "charging",
+    }}})
+    monkeypatch.setattr(api.session, "post", lambda *a, **k: resp)
+    out = api.get_vehicle_state("veh-1")
+    assert out["soc_percent"] == 55.0
+    assert out["charger_state"] == "charging"
+
+
+def test_get_vehicle_state_defensive_on_errors(monkeypatch):
+    api = _api_with_tokens("tok")
+    monkeypatch.setattr(api.session, "post", lambda *a, **k: FakeResp({"errors": [{"message": "nope"}]}))
+    assert api.get_vehicle_state("veh-1") is None
+    # unauthenticated / missing id never hit the network
+    assert RivianAPI().get_vehicle_state("veh-1") is None
+    assert api.get_vehicle_state(None) is None
+
+
+def test_get_vehicles_defensive(monkeypatch):
+    api = _api_with_tokens("tok")
+    resp = FakeResp({"data": {"currentUser": {"vehicles": [
+        {"id": "veh-1", "name": "R1T", "vin": "V"}, {"name": "no-id"},
+    ]}}})
+    monkeypatch.setattr(api.session, "post", lambda *a, **k: resp)
+    out = api.get_vehicles()
+    assert out == [{"id": "veh-1", "name": "R1T", "vin": "V"}]
+    monkeypatch.setattr(api.session, "post", lambda *a, **k: FakeResp({"errors": [{}]}))
+    assert api.get_vehicles() == []
+    assert RivianAPI().get_vehicles() == []
