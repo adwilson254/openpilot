@@ -14,6 +14,7 @@ from opendbc.can.parser import CANParser
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.rivian.values import DBC
 from opendbc.sunnypilot.car.rivian.values import RivianFlagsSP
+from opendbc.sunnypilot.car.rivian.crawl import CrawlController
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
@@ -44,6 +45,12 @@ class CarStateExt:
     self._prev_stalk_down2: bool = False
     self._prev_stalk_down: bool = False
     self._frames_since_acc_on: int = 0
+
+    # OpenRivian crawl: lets the set-speed floor step below 20 mph (down to 5 mph)
+    # under a strict driver-gesture gate. See crawl.py. _crawl_prev_at_floor tracks
+    # whether the set speed was resting at the 20 mph floor last frame (entry gate).
+    self.crawl = CrawlController(Params())
+    self._crawl_prev_at_floor: bool = False
 
   def update_stalk_controls(self, ret: structs.CarState, can_parsers: dict[StrEnum, CANParser]) -> list:
     cp = can_parsers[Bus.pt]
@@ -171,7 +178,23 @@ class CarStateExt:
         self._resume_eligible = False
         self._resume_acc_counter = 0
 
-      self.set_speed = max(MIN_SET_SPEED, min(self.set_speed, MAX_SET_SPEED))
+      # OpenRivian crawl: allow the set-speed floor to step below 20 mph (down to
+      # 5 mph) ONLY via a deliberate DECREASE tap while engaged and resting at the
+      # floor. When crawl is inactive this is identical to the original
+      # max(MIN_SET_SPEED, min(set_speed, MAX_SET_SPEED)) clamp.
+      dec_edge = self.decrease_button and not prev_decrease_button
+      inc_edge = self.increase_button and not prev_increase_button
+      crawl_cap = self.crawl.update(engaged=ret.cruiseState.enabled, v_ego_ms=ret.vEgoCluster,
+                                    resting_at_floor=self._crawl_prev_at_floor,
+                                    dec_edge=dec_edge, inc_edge=inc_edge)
+      if crawl_cap is not None:
+        # Crawl owns the lower bound (>= 5 mph); still respect the normal upper clamp.
+        self.set_speed = min(crawl_cap, MAX_SET_SPEED)
+      else:
+        self.set_speed = max(MIN_SET_SPEED, min(self.set_speed, MAX_SET_SPEED))
+
+      # Arm the entry gate only when at rest on the 20 mph floor and NOT already crawling.
+      self._crawl_prev_at_floor = (not self.crawl.active) and (abs(self.set_speed - MIN_SET_SPEED) < 0.05)
       ret.cruiseState.speed = self.set_speed
 
     if self.CP.enableBsm:
