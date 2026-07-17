@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-import os
-try:
-    os.nice(19)
-except Exception:
-    pass
-
+# NOTE: os.nice(19) must only be called inside main(), never at module level.
+# The process manager pre-imports every daemon module inside the manager process
+# (manager_init -> prepare -> importlib.import_module) BEFORE forking children, so a
+# module-level nice() permanently demotes manager and the ENTIRE openpilot stack
+# (root cause of the 2026-07 "TAKE CONTROL IMMEDIATELY / Communication Issue" storms).
+# Guarded by tests/test_no_module_level_nice.py.
 import time
 import os
 from openpilot.common.swaglog import cloudlog
