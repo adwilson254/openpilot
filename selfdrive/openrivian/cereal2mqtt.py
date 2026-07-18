@@ -35,6 +35,7 @@ MQTT_PORT = 1883
 #                     acts as a deadband so noise doesn't defeat change-detection.
 BASE_TICK_HZ = 20.0
 HIGH_RATE_HZ = 20.0
+MID_RATE_HZ = 10.0
 NORMAL_RATE_HZ = 2.0
 HEARTBEAT_S = 30.0
 SLEEP_DUR = 1.0 / BASE_TICK_HZ
@@ -48,6 +49,16 @@ HIGH_RATE_TOPICS = {
     "openrivian/vehicle/powertrain/speed_ms",
     "openrivian/vehicle/powertrain/speed_mph",
     "openrivian/vehicle/controls/steering_angle_deg",
+}
+
+# Topics that stream at MID_RATE_HZ. Location runs here (gpsLocationExternal
+# arrives at 10 Hz): the infotainment map animates the vehicle marker between
+# fixes, and 2 Hz makes it visibly step. ~+32 msg/s total on the local broker.
+MID_RATE_TOPICS = {
+    "openrivian/vehicle/location/latitude",
+    "openrivian/vehicle/location/longitude",
+    "openrivian/vehicle/location/altitude",
+    "openrivian/vehicle/location/bearing",
 }
 
 # Topics published only when their (rounded) value changes. Booleans, enums and other
@@ -69,6 +80,11 @@ ON_CHANGE_TOPICS = {
     "openrivian/vehicle/adas/cruise_available",
     "openrivian/adas/enabled",
     "openrivian/adas/active",
+    # openpilot alert mirroring: text/status change rarely, retain for late joiners.
+    "openrivian/adas/alert_text1",
+    "openrivian/adas/alert_text2",
+    "openrivian/adas/alert_status",
+    "openrivian/adas/personality",
     "openrivian/device/hardware/camerad_running",
     # Health canaries (see the HEALTH block in publish_state): slow-changing flags,
     # retained so a late-connecting dashboard sees current health immediately.
@@ -113,7 +129,7 @@ def _should_publish(topic, val, now):
             return True
         return (now - last_ts) >= HEARTBEAT_S  # periodic heartbeat
     # rate-limited
-    hz = HIGH_RATE_HZ if topic in HIGH_RATE_TOPICS else NORMAL_RATE_HZ
+    hz = HIGH_RATE_HZ if topic in HIGH_RATE_TOPICS else MID_RATE_HZ if topic in MID_RATE_TOPICS else NORMAL_RATE_HZ
     if last is None:
         return True
     return (now - last[1]) >= (1.0 / hz)
@@ -258,6 +274,15 @@ def publish_state(client, sm):
             publish_safely(client, "openrivian/adas/enabled", ss.enabled)
         if hasattr(ss, 'active'):
             publish_safely(client, "openrivian/adas/active", ss.active)
+        # Alert mirroring for the infotainment dashboard: the car screen's alert
+        # text/status, on-change + retained. Empty text publishes too (clears the
+        # banner on the dashboard side).
+        if hasattr(ss, 'alertText1'):
+            publish_safely(client, "openrivian/adas/alert_text1", str(ss.alertText1))
+            publish_safely(client, "openrivian/adas/alert_text2", str(getattr(ss, 'alertText2', '')))
+            publish_safely(client, "openrivian/adas/alert_status", str(getattr(ss, 'alertStatus', '')))
+        if hasattr(ss, 'personality'):
+            publish_safely(client, "openrivian/adas/personality", str(ss.personality))
 
     # --- RADAR STATE ---
     if sm.updated['radarState']:

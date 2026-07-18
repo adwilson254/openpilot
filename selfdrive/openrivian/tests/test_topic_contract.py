@@ -19,7 +19,11 @@ SOURCE = pathlib.Path("selfdrive/openrivian/cereal2mqtt.py")
 # Frozen contract -- the complete set of topics cereal2mqtt may publish.
 EXPECTED_TOPICS = {
     "openrivian/adas/active",
+    "openrivian/adas/alert_status",
+    "openrivian/adas/alert_text1",
+    "openrivian/adas/alert_text2",
     "openrivian/adas/enabled",
+    "openrivian/adas/personality",
     "openrivian/adas/radar/lead_one_d_rel",
     "openrivian/adas/radar/lead_one_v_rel",
     "openrivian/device/hardware/camerad_running",

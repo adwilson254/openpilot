@@ -135,7 +135,9 @@ def synthetic_frames(n=20, hz=2.0):
                 "rightBlinker": False,
                 "fuelGauge": 0.72,
             },
-            "selfdriveState": {"enabled": True, "active": v > 5.0},
+            "selfdriveState": {"enabled": True, "active": v > 5.0,
+                               "alertText1": "", "alertText2": "",
+                               "alertStatus": "normal", "personality": "standard"},
             "radarState": {"leadOne": {"status": v > 5.0, "dRel": 42.0 - v, "vRel": -1.5}},
             "managerState": {"processes": [{"name": "camerad", "running": True}]},
             "deviceState": {

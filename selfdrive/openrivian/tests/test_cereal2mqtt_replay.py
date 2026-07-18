@@ -135,3 +135,48 @@ def test_replay_is_deterministic():
     a = harness.replay(harness.synthetic_frames(n=10)).published
     b = harness.replay(harness.synthetic_frames(n=10)).published
     assert a == b
+
+
+def test_alert_mirroring_publishes_text_and_status():
+    frame = next(harness.synthetic_frames(n=1))
+    frame["selfdriveState"] = {"enabled": True, "active": True,
+                               "alertText1": "TAKE CONTROL", "alertText2": "Steer Exceeded",
+                               "alertStatus": "userPrompt", "personality": "relaxed"}
+    client = _run(frame)
+    assert client.last("openrivian/adas/alert_text1") == "TAKE CONTROL"
+    assert client.last("openrivian/adas/alert_text2") == "Steer Exceeded"
+    assert client.last("openrivian/adas/alert_status") == "userPrompt"
+    assert client.last("openrivian/adas/personality") == "relaxed"
+
+
+def test_alert_clear_publishes_empty_text():
+    # The banner must clear: empty alert text is itself an on-change publish.
+    frames = list(harness.synthetic_frames(n=1))
+    f1 = dict(frames[0])
+    f1["selfdriveState"] = {"enabled": True, "active": True, "alertText1": "TAKE CONTROL",
+                            "alertText2": "", "alertStatus": "critical", "personality": "standard"}
+    f2 = dict(frames[0])
+    f2["selfdriveState"] = {"enabled": True, "active": True, "alertText1": "",
+                            "alertText2": "", "alertStatus": "normal", "personality": "standard"}
+    client = harness.replay([f1, f2])
+    vals = client.values_for("openrivian/adas/alert_text1")
+    assert vals == ["TAKE CONTROL", ""]
+
+
+def test_mid_rate_location_gates_by_interval():
+    # Location topics sit in the 10 Hz tier: first sample publishes, an immediate
+    # repeat is gated (same mechanism as the high-rate tier, different budget).
+    from selfdrive.openrivian import cereal2mqtt
+    assert "openrivian/vehicle/location/latitude" in cereal2mqtt.MID_RATE_TOPICS
+    cereal2mqtt._pub_state.clear()
+
+    class Rec:
+        def __init__(self):
+            self.n = 0
+        def publish(self, *_a, **_k):
+            self.n += 1
+
+    rec = Rec()
+    cereal2mqtt.publish_safely(rec, "openrivian/vehicle/location/latitude", 37.1)
+    cereal2mqtt.publish_safely(rec, "openrivian/vehicle/location/latitude", 37.2)  # gated
+    assert rec.n == 1
