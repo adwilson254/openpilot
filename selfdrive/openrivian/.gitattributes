@@ -7,3 +7,6 @@
 *.svg -filter -diff -merge -text
 *.png -filter -diff -merge -text
 *.gif -filter -diff -merge -text
+*.woff -filter -diff -merge -text
+*.woff2 -filter -diff -merge -text
+*.ttf -filter -diff -merge -text
