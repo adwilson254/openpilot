@@ -1,260 +1,268 @@
-import { useState, useEffect } from 'react';
-import Paho from 'paho-mqtt';
-import './App.css';
-import settingsUISchema from './assets/settings_ui.json';
-import paramsMetadata from './assets/params_metadata.json';
-import Telemetry from './Telemetry';
-import DriveHistory from './DriveHistory';
-import Controls from './Controls';
-import DesignShowcase from './DesignShowcase';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import './theme.css';
+import { useTelemetry, ALIVE_TOPIC } from './lib/mqtt';
+import { usePrefs } from './lib/prefs';
+import { T, fmt, bool } from './lib/format';
+import { isDaytime } from './lib/sun';
+import {
+  IconDrive, IconMap, IconEnergy, IconTruck, IconMore, IconGear, IconPulse,
+  IconCamp, IconDrives, IconDevice, IconSignals, IconSettings, IconClose, IconChevronR,
+} from './lib/icons';
+import { OpenpilotAlert } from './components/Alerts';
+import Drive from './views/Drive';
+import MapTab from './views/Location';
+import Energy from './views/Energy';
+import Vehicle from './views/Vehicle';
+import Camp from './views/Camp';
+import Device from './views/Device';
+import Drives from './views/Drives';
+import Signals from './views/Signals';
+import Settings from './views/Settings';
 
-function renderItem(item, settings, onUpdateSetting) {
-  const meta = paramsMetadata[item.key] || {};
-  const value = settings[item.key];
+/* Information architecture:
+   - Dock (always visible): Drive · Map · Energy · Truck · More
+   - Drive/Map are full-bleed canvases; the rest scroll.
+   - "More" opens a sheet with the secondary destinations. Everything remains
+     hash-routable so deep links and the back button keep working. */
 
-  if (item.widget === 'toggle') {
-    return (
-      <div key={item.key} className="setting-row">
-        <div style={{ paddingRight: '1rem' }}>
-          <div className="setting-title">{item.title}</div>
-          <div className="setting-desc">{item.description}</div>
-        </div>
-        <button 
-          className="cel-button"
-          onClick={() => onUpdateSetting(item.key, !value)}
-          style={{
-            background: value ? '#00D582' : '#333',
-            color: '#FFF',
-            minWidth: '80px',
-          }}
-        >
-          {value ? "ON" : "OFF"}
-        </button>
-      </div>
-    );
-  }
-  else if (item.widget === 'option' || item.widget === 'multiple_button') {
-    const options = item.options || meta.options || [];
-    if (options.length === 0) return null;
-    return (
-      <div key={item.key} className="setting-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '0.5rem' }}>
-        <div>
-          <div className="setting-title">{item.title}</div>
-          <div className="setting-desc">{item.description}</div>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.5rem' }}>
-          {options.map(opt => (
-            <button
-              key={opt.value}
-              className="cel-button"
-              onClick={() => onUpdateSetting(item.key, opt.value)}
-              style={{
-                background: value === opt.value ? '#FFD500' : '#FFF',
-                color: '#1A1A1A',
-              }}
-            >
-              {opt.label || opt.value}
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
-  return null;
+const DOCK = [
+  { id: 'drive', label: 'DRIVE', icon: IconDrive, view: Drive, canvas: true },
+  { id: 'map', label: 'MAP', icon: IconMap, view: MapTab, canvas: true },
+  { id: 'energy', label: 'ENERGY', icon: IconEnergy, view: Energy },
+  { id: 'truck', label: 'TRUCK', icon: IconTruck, view: Vehicle },
+];
+const MORE = [
+  { id: 'camp', label: 'Camp Mode', icon: IconCamp, view: Camp },
+  { id: 'drives', label: 'Drive History', icon: IconDrives, view: Drives },
+  { id: 'device', label: 'Device Health', icon: IconDevice, view: Device },
+  { id: 'signals', label: 'Signals Explorer', icon: IconSignals, view: Signals },
+  { id: 'settings', label: 'Vehicle Settings', icon: IconSettings, view: Settings, hint: 'read-only' },
+];
+const ALL = [...DOCK, ...MORE];
+const IDS = ALL.map((v) => v.id);
+const LEGACY = { vehicle: 'truck', adas: 'drive', location: 'map' }; // old hash names
+
+function initialTab() {
+  const h = window.location.hash.replace('#', '');
+  if (IDS.includes(h)) return h;
+  if (LEGACY[h]) return LEGACY[h];
+  try { const s = localStorage.getItem('orv.tab'); if (IDS.includes(s)) return s; } catch { /* noop */ }
+  return 'drive';
 }
 
-function SettingsView({ activePanelId, setActivePanelId, settings, onUpdateSetting }) {
-  const panels = settingsUISchema.panels || [];
-  
-  const currentPanel = panels.find(p => p.id === activePanelId);
+function Clock() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 5000);
+    return () => clearInterval(id);
+  }, []);
+  let h = now.getHours();
+  const ap = h >= 12 ? 'PM' : 'AM';
+  h = h % 12 || 12;
+  return <span className="clock">{h}:{String(now.getMinutes()).padStart(2, '0')} {ap}</span>;
+}
 
+function ConnBadge() {
+  const t = useTelemetry();
+  const { status } = t;
+  if (status === 'sim') return <span className="chip"><span className="dot" style={{ background: 'var(--yellow)' }} /> SIMULATED</span>;
+  const bridgeAlive = t.get(ALIVE_TOPIC);
+  const live = status === 'live' && bridgeAlive !== false;
+  const label = status === 'connecting' ? 'CONNECTING…'
+    : status !== 'live' ? 'OFFLINE'
+    : bridgeAlive === false ? 'BRIDGE DOWN' : 'LIVE';
   return (
-    <div className="app-layout">
-      {/* Sidebar Navigation */}
-      <div className="app-sidebar">
-        {panels.map(panel => (
-          <div 
-            key={panel.id}
-            className={`nav-item ${activePanelId === panel.id ? 'active' : ''}`}
-            onClick={() => setActivePanelId(panel.id)}
-          >
-            {panel.label}
-          </div>
-        ))}
-      </div>
-
-      {/* Main Settings Content */}
-      <div className="app-main">
-        <div className="app-content">
-          {!currentPanel ? <div>Select a category</div> : (
-            <>
-              <div className="cel-card" style={{ width: '100%', marginBottom: '2rem' }}>
-                <h1 style={{ margin: 0, fontWeight: 900 }}>{currentPanel.label}</h1>
-                {currentPanel.description && <p style={{ color: '#666', marginTop: '0.5rem' }}>{currentPanel.description}</p>}
-              </div>
-              
-              <div className="cel-card" style={{ width: '100%', padding: '2rem' }}>
-                {currentPanel.sections?.map(section => (
-                  <div key={section.id} style={{ marginBottom: '2rem' }}>
-                    {section.title && <h2 style={{ borderBottom: '2px solid #1A1A1A', paddingBottom: '0.5rem', marginBottom: '1rem' }}>{section.title}</h2>}
-                    {section.items?.map(item => {
-                      if (item.key) return renderItem(item, settings, onUpdateSetting);
-                      return null;
-                    })}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    <span className={`chip ${label === 'BRIDGE DOWN' ? 'caution' : ''}`}>
+      <span className={`dot ${live ? 'pulse' : 'off'}`} />{label}
+    </span>
   );
 }
 
-function App() {
-  const [telemetry, setTelemetry] = useState({ speed: 0, battery: 0, gear: 'P', cpuTemp: 0 });
-  const [settings, setSettings] = useState({});
-  const [mqttClient, setMqttClient] = useState(null);
-  
-  // Tab Routing: "telemetry", "settings", "history", "controls", "showcase"
-  const [activeTab, setActiveTab] = useState("telemetry");
-  const [activePanelId, setActivePanelId] = useState("steering");
+function HealthChip() {
+  const t = useTelemetry();
+  const demoted = bool(t.get(T.healthDemoted));
+  const comm = bool(t.get(T.healthCommIssue));
+  if (demoted || comm) {
+    return <span className="chip caution"><IconPulse size={14} aria-hidden="true" />{demoted ? 'SCHED' : 'COMM'} FAULT</span>;
+  }
+  return <span className="chip"><IconPulse size={14} aria-hidden="true" />SYSTEM OK</span>;
+}
 
-  useEffect(() => {
-    // Check URL params first (e.g. ?host=192.168.2.232), then fallback to truck IP if localhost
-    const urlParams = new URLSearchParams(window.location.search);
-    const hostParam = urlParams.get('host');
-    const host = hostParam ? hostParam : (window.location.hostname === 'localhost' ? '192.168.0.233' : window.location.hostname);
-    
-    const client = new Paho.Client(host, Number(9001), "clientId-" + Math.random().toString(16).substr(2, 8));
-
-    client.onConnectionLost = (responseObject) => {
-      if (responseObject.errorCode !== 0) {
-        console.error("MQTT Connection Lost:", responseObject.errorMessage);
-      }
-    };
-
-    client.onMessageArrived = (message) => {
-      try {
-        const topic = message.destinationName;
-        const payload = JSON.parse(message.payloadString);
-        
-        // Settings Mapping
-        if (topic.startsWith("openrivian/settings/status/")) {
-          const paramKey = topic.split('/').pop();
-          setSettings(prev => ({ ...prev, [paramKey]: payload.value }));
-        }
-        // Telemetry Mapping
-        else if (topic === "openrivian/vehicle/powertrain/speed_mph") {
-          setTelemetry(prev => ({ ...prev, speed: Math.round(payload.value) }));
-        }
-        else if (topic === "openrivian/vehicle/powertrain/gear") {
-          setTelemetry(prev => ({ ...prev, gear: payload.value }));
-        }
-        else if (topic === "openrivian/vehicle/powertrain/soc") {
-          setTelemetry(prev => ({ ...prev, battery: Math.round(payload.value) }));
-        }
-        else if (topic === "openrivian/adas/active") {
-          setTelemetry(prev => ({ ...prev, adasActive: payload.value }));
-        }
-        else if (topic === "openrivian/vehicle/powertrain/wheel_speed_fl") {
-          setTelemetry(prev => ({ ...prev, flSpeed: Math.round(payload.value) }));
-        }
-        else if (topic === "openrivian/vehicle/powertrain/wheel_speed_fr") {
-          setTelemetry(prev => ({ ...prev, frSpeed: Math.round(payload.value) }));
-        }
-        else if (topic === "openrivian/vehicle/powertrain/wheel_speed_rl") {
-          setTelemetry(prev => ({ ...prev, rlSpeed: Math.round(payload.value) }));
-        }
-        else if (topic === "openrivian/vehicle/powertrain/wheel_speed_rr") {
-          setTelemetry(prev => ({ ...prev, rrSpeed: Math.round(payload.value) }));
-        }
-        else if (topic === "openrivian/device/hardware/cpu_temp_c") {
-          setTelemetry(prev => ({ ...prev, cpuTemp: Math.round(payload.value) }));
-        }
-        else if (topic === "openrivian/device/hardware/free_space_percent") {
-          setTelemetry(prev => ({ ...prev, freeSpace: payload.value.toFixed(1) }));
-        }
-      } catch (e) {
-        console.error("Error parsing MQTT message:", e);
-      }
-    };
-
-    client.connect({
-      onSuccess: () => {
-        console.log("Connected to MQTT Broker");
-        client.subscribe("openrivian/vehicle/#");
-        client.subscribe("openrivian/device/#");
-        client.subscribe("openrivian/settings/status/#");
-      },
-      onFailure: (e) => console.error("MQTT Connection Failed", e)
-    });
-
-    setMqttClient(client);
-
-    return () => {
-      if (client.isConnected()) {
-        client.disconnect();
-      }
-    };
-  }, []);
-
-  const handleUpdateSetting = (key, value) => {
-    if (mqttClient && mqttClient.isConnected()) {
-      const message = new Paho.Message(JSON.stringify({ value }));
-      message.destinationName = `openrivian/settings/set/${key}`;
-      mqttClient.send(message);
-    }
-    
-    setSettings(prev => ({ ...prev, [key]: value }));
-  };
-
+function SocPill() {
+  const t = useTelemetry();
+  const soc = t.get(T.energySoc, t.get(T.soc)); // cloud first, CAN when decoded
+  const range = t.get(T.energyRange);
+  const has = soc !== undefined && soc !== null;
+  const pct = has ? Math.max(0, Math.min(100, Number(soc))) : 0;
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
-      
-      {/* Top Bar Navigation */}
-      <div style={{ 
-        display: 'flex', 
-        justifyContent: 'center', 
-        gap: '1rem', 
-        padding: '1rem', 
-        background: '#121212', 
-        borderBottom: '3px solid #1A1A1A',
-        zIndex: 100 
-      }}>
-        {['telemetry', 'settings', 'history', 'controls', 'showcase'].map(tab => (
-          <button 
-            key={tab}
-            className="cel-button"
-            onClick={() => setActiveTab(tab)}
-            style={{
-              background: activeTab === tab ? '#FFD500' : '#333',
-              color: activeTab === tab ? '#000' : '#FFF',
-              textTransform: 'capitalize'
-            }}
-          >
-            {tab}
+    <span className="soc-pill" aria-label={has ? `Battery ${fmt(soc, 0)} percent` : 'Battery unknown'}>
+      <span className="soc-bar"><i style={{ width: `${pct}%` }} /></span>
+      {has ? `${fmt(soc, 0)}%` : '—'}
+      {range !== undefined && range !== null && (
+        <span style={{ color: 'var(--text-faint)', fontWeight: 700, fontSize: 12 }}>· {fmt(range, 0)} mi</span>
+      )}
+    </span>
+  );
+}
+
+/* Sheet with basic focus management: focus moves in on open, Esc closes,
+   backdrop is a real button. */
+function Sheet({ title, onClose, children }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    const prev = document.activeElement;
+    ref.current?.querySelector('button, input, [tabindex]')?.focus();
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); prev?.focus?.(); };
+  }, [onClose]);
+  return (
+    <>
+      <button className="sheet-backdrop" onClick={onClose} aria-label="Close panel" />
+      <div className="sheet" role="dialog" aria-modal="true" aria-label={title} ref={ref}>
+        <div className="sheet-head">
+          <h2>{title}</h2>
+          <button className="icon-btn" onClick={onClose} aria-label="Close"><IconClose size={20} /></button>
+        </div>
+        <div className="sheet-body">{children}</div>
+      </div>
+    </>
+  );
+}
+
+function AppSettingsSheet({ onClose }) {
+  const { units, setUnits, host, setHost, valhalla, setValhalla, theme, setTheme } = usePrefs();
+  const [draft, setDraft] = useState(host);
+  const [vDraft, setVDraft] = useState(valhalla);
+  const save = () => { setHost(draft.trim()); window.location.reload(); };
+  return (
+    <Sheet title="App Settings" onClose={onClose}>
+      <div className="microlabel" style={{ marginBottom: 8 }}>Theme</div>
+      <div className="seg" style={{ marginBottom: 20 }}>
+        {['auto', 'day', 'night'].map((v) => (
+          <button key={v} className={`opt-btn ${theme === v ? 'sel' : ''}`} onClick={() => setTheme(v)}>
+            {v[0].toUpperCase() + v.slice(1)}
           </button>
         ))}
       </div>
-
-      {/* Main Routing Area */}
-      <div style={{ flex: 1, overflow: 'hidden' }}>
-        {activeTab === 'telemetry' && <Telemetry telemetry={telemetry} />}
-        {activeTab === 'settings' && (
-          <SettingsView 
-            activePanelId={activePanelId} 
-            setActivePanelId={setActivePanelId} 
-            settings={settings} 
-            onUpdateSetting={handleUpdateSetting} 
-          />
-        )}
-        {activeTab === 'history' && <DriveHistory />}
-        {activeTab === 'controls' && <Controls mqttClient={mqttClient} />}
+      <div className="microlabel" style={{ marginBottom: 8 }}>Units</div>
+      <div className="seg" style={{ marginBottom: 20 }}>
+        <button className={`opt-btn ${units === 'imperial' ? 'sel' : ''}`} onClick={() => setUnits('imperial')}>Imperial</button>
+        <button className={`opt-btn ${units === 'metric' ? 'sel' : ''}`} onClick={() => setUnits('metric')}>Metric</button>
       </div>
-    </div>
+      <div className="microlabel" style={{ marginBottom: 8 }}>Comma host / IP</div>
+      <div className="row" style={{ marginBottom: 20 }}>
+        <input className="sig-search" style={{ margin: 0, flex: 1 }} placeholder={window.location.hostname}
+               value={draft} onChange={(e) => setDraft(e.target.value)} aria-label="Comma host or IP" />
+        <button className="opt-btn sel" onClick={save}>Save</button>
+      </div>
+      <div className="microlabel" style={{ marginBottom: 8 }}>Valhalla routing endpoint</div>
+      <input className="sig-search" style={{ margin: 0 }} placeholder="https://valhalla1.openstreetmap.de"
+             value={vDraft} onChange={(e) => setVDraft(e.target.value)} onBlur={() => setValhalla(vDraft.trim())}
+             aria-label="Valhalla routing endpoint" />
+    </Sheet>
   );
 }
 
-export default App;
+export default function App() {
+  const t = useTelemetry();
+  const prefs = usePrefs();
+  const [tab, setTabState] = useState(initialTab);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const current = ALL.find((v) => v.id === tab) || DOCK[0];
+  const View = current.view;
+  const inMore = MORE.some((v) => v.id === tab);
+
+  const setTab = useCallback((id) => {
+    setTabState(id);
+    setMoreOpen(false);
+    try { localStorage.setItem('orv.tab', id); } catch { /* noop */ }
+  }, []);
+
+  useEffect(() => {
+    if (window.location.hash.replace('#', '') !== tab) window.location.hash = tab;
+  }, [tab]);
+  useEffect(() => {
+    const onHash = () => {
+      const h = window.location.hash.replace('#', '');
+      if (IDS.includes(h)) setTabState(h);
+      else if (LEGACY[h]) setTabState(LEGACY[h]);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  // Theme: manual pref wins; auto follows the sun at the truck's position.
+  const lat = Number(t.get(T.lat)), lon = Number(t.get(T.lon));
+  useEffect(() => {
+    const apply = () => {
+      const eff = prefs.theme === 'auto'
+        ? (isDaytime(new Date(), lat, lon) ? 'day' : 'night')
+        : prefs.theme;
+      document.documentElement.dataset.theme = eff;
+    };
+    apply();
+    const id = setInterval(apply, 60000);
+    return () => clearInterval(id);
+  }, [prefs.theme, lat, lon]);
+
+  // Density: simplify the drive canvas while moving.
+  const speed = Number(t.get(T.speed_mph, 0)) || 0;
+  const density = speed > 5 ? 'driving' : 'parked';
+
+  return (
+    <div className="shell" data-density={density}>
+      <header className="strip">
+        <Clock />
+        <ConnBadge />
+        <HealthChip />
+        <span className="spacer" />
+        <SocPill />
+        <button className="icon-btn" style={{ width: 52, height: 52 }} title="App settings"
+                aria-label="App settings" onClick={() => setSettingsOpen(true)}>
+          <IconGear size={24} />
+        </button>
+      </header>
+
+      <OpenpilotAlert />
+      <main className={`content ${current.canvas ? '' : 'scroll'}`}>
+        <View />
+      </main>
+
+      <nav className="dock" aria-label="Primary">
+        {DOCK.map((v) => {
+          const Ic = v.icon;
+          return (
+            <button key={v.id} className={`dock-btn ${tab === v.id ? 'active' : ''}`}
+                    aria-current={tab === v.id ? 'page' : undefined} onClick={() => setTab(v.id)}>
+              <Ic aria-hidden="true" />{v.label}
+            </button>
+          );
+        })}
+        <button className={`dock-btn ${inMore || moreOpen ? 'active' : ''}`}
+                aria-expanded={moreOpen} onClick={() => setMoreOpen(true)}>
+          <IconMore aria-hidden="true" />MORE
+        </button>
+      </nav>
+
+      {moreOpen && (
+        <Sheet title="More" onClose={() => setMoreOpen(false)}>
+          {MORE.map((v) => {
+            const Ic = v.icon;
+            return (
+              <button key={v.id} className="sheet-item" onClick={() => setTab(v.id)}>
+                <Ic size={22} aria-hidden="true" />
+                <span className="grow">{v.label}</span>
+                {v.hint && <span className="hint">{v.hint}</span>}
+                <IconChevronR size={18} aria-hidden="true" />
+              </button>
+            );
+          })}
+        </Sheet>
+      )}
+      {settingsOpen && <AppSettingsSheet onClose={() => setSettingsOpen(false)} />}
+    </div>
+  );
+}
