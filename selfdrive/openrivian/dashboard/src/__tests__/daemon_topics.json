@@ -2,7 +2,11 @@
   "_comment": "Mirror of every topic the OpenRivian daemons publish: cereal2mqtt (contract frozen on the mqtt branch in test_topic_contract.py EXPECTED_TOPICS) plus openriviand's energy topics (api branch). Keep all three in sync: if a daemon adds/renames a topic, update the daemon-side contract AND this mirror. The UI must only read topics a daemon publishes.",
   "topics": [
     "openrivian/adas/active",
+    "openrivian/adas/alert_status",
+    "openrivian/adas/alert_text1",
+    "openrivian/adas/alert_text2",
     "openrivian/adas/enabled",
+    "openrivian/adas/personality",
     "openrivian/adas/radar/lead_one_d_rel",
     "openrivian/adas/radar/lead_one_v_rel",
     "openrivian/device/hardware/camerad_running",

@@ -3,7 +3,7 @@
    the buffer is always current), and this module deliberately exports both the provider
    and its hook — the lint rule below is noise for this pattern. */
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import Paho from 'paho-mqtt';
 import { simEnabled, simSnapshot, loadSimTimeline } from './sim';
 

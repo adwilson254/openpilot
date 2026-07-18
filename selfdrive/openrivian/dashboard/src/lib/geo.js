@@ -23,3 +23,20 @@ export function haversine(a, b) {
 
 export const km = (m) => (m / 1000);
 export const mi = (m) => (m / 1609.34);
+
+// --- MapCanvas helpers (pure, unit-tested) ---------------------------------
+
+// Tile source: same-origin webd proxy (cached on the comma). The renderer swaps
+// a failed tile to the public upstream once (dev servers without the proxy).
+export const tileUrl = (z, x, y) => `/tiles/${z}/${x}/${y}.png`;
+export const tileFallbackUrl = (z, x, y) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`;
+
+// How many tile columns/rows cover a viewport (+2 overscan for panning).
+export const tileSpan = (px) => Math.ceil(px / TILE) + 2;
+
+// Follow-mode auto zoom: close-in when parked, wider with speed.
+// 0 mph -> 16, ~35 mph -> 14, >=70 mph -> 13 (clamped).
+export function zoomForSpeed(mph) {
+  const v = Number.isFinite(mph) ? Math.max(0, mph) : 0;
+  return Math.round(Math.min(16, Math.max(13, 16 - v / 23)));
+}

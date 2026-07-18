@@ -4,8 +4,6 @@
   font-synthesis: none;
   text-rendering: optimizeLegibility;
 }
+html[data-theme="day"] { color-scheme: light; }
 a { color: inherit; }
 button { font-family: inherit; }
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: #2b2f37; border-radius: 8px; }
-::-webkit-scrollbar-track { background: transparent; }

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 import os
+import re
 import http.server
 import socketserver
 import logging
 import threading
+import urllib.request
 
 PORT = 8081
 
@@ -11,6 +13,71 @@ ROUTE_CACHE = []
 ROUTE_CACHE_LOCK = threading.Lock()
 
 ROUTES_PATH = "/data/media/0/realdata/"
+
+# ---------------------------------------------------------------------------
+# Map tile proxy + disk cache.
+# The dashboard requests /tiles/{z}/{x}/{y}.png from THIS server; we fetch the
+# tile from OpenStreetMap once (proper identifying User-Agent, per the OSM tile
+# usage policy), persist it, and serve from disk forever after. Wins: the in-car
+# screen only ever talks to the comma; every client shares one cache; regular
+# routes become offline-capable after the first drive.
+# ---------------------------------------------------------------------------
+TILE_UPSTREAM = "https://tile.openstreetmap.org"
+TILE_USER_AGENT = "OpenRivian-Dashboard/1.0 (personal vehicle project; github.com/adwilson254/openpilot)"
+TILE_CACHE_DIR = os.environ.get("ORV_TILE_CACHE", "/data/openrivian/tiles")
+TILE_ZOOM_MIN, TILE_ZOOM_MAX = 3, 19
+_TILE_RE = re.compile(r"^/tiles/(\d{1,2})/(\d{1,7})/(\d{1,7})\.png$")
+
+
+def parse_tile_path(path):
+    """Validate /tiles/{z}/{x}/{y}.png -> (z, x, y) ints, or None if invalid.
+    The regex admits digits only (no traversal), and bounds are checked so a
+    hostile path can never escape the cache directory or hit upstream junk."""
+    m = _TILE_RE.match(path)
+    if not m:
+        return None
+    z, x, y = (int(g) for g in m.groups())
+    if not (TILE_ZOOM_MIN <= z <= TILE_ZOOM_MAX):
+        return None
+    n = 2 ** z
+    if not (0 <= x < n and 0 <= y < n):
+        return None
+    return z, x, y
+
+
+def tile_cache_path(z, x, y, cache_dir=None):
+    return os.path.join(cache_dir or TILE_CACHE_DIR, str(z), str(x), f"{y}.png")
+
+
+def fetch_tile(z, x, y, cache_dir=None, opener=None):
+    """Return tile PNG bytes from cache or upstream; None when unavailable.
+    Never raises: an offline truck must degrade to 'no tile', not a dead daemon."""
+    cpath = tile_cache_path(z, x, y, cache_dir)
+    try:
+        with open(cpath, "rb") as f:
+            return f.read()
+    except OSError:
+        pass
+    try:
+        req = urllib.request.Request(
+            f"{TILE_UPSTREAM}/{z}/{x}/{y}.png", headers={"User-Agent": TILE_USER_AGENT})
+        open_fn = opener or urllib.request.urlopen
+        with open_fn(req, timeout=10) as resp:
+            data = resp.read()
+        if not data:
+            return None
+        try:
+            os.makedirs(os.path.dirname(cpath), exist_ok=True)
+            tmp = f"{cpath}.tmp.{os.getpid()}.{threading.get_ident()}"
+            with open(tmp, "wb") as f:
+                f.write(data)
+            os.replace(tmp, cpath)  # atomic: concurrent readers never see partial files
+        except OSError as e:
+            logging.debug(f"tile cache write failed ({cpath}): {e}")
+        return data
+    except Exception as e:
+        logging.debug(f"tile fetch failed {z}/{x}/{y}: {e}")
+        return None
 
 # Mock data used when the realdata directory is unavailable (e.g. local dev).
 MOCK_ROUTES = [
@@ -102,6 +169,24 @@ def main():
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps(routes).encode('utf-8'))
+                return
+
+            if self.path.startswith('/tiles/'):
+                tile = parse_tile_path(self.path)
+                data = fetch_tile(*tile) if tile else None
+                if tile is None:
+                    self.send_response(400)
+                    self.end_headers()
+                elif data is None:
+                    self.send_response(503)  # offline and not cached yet
+                    self.end_headers()
+                else:
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'image/png')
+                    self.send_header('Content-Length', str(len(data)))
+                    self.send_header('Cache-Control', 'public, max-age=604800')
+                    self.end_headers()
+                    self.wfile.write(data)
                 return
 
             # If the requested path is not a file, return index.html
