@@ -4,10 +4,11 @@
   "description": "Companion dashboard for OpenRivian on the comma device",
   "start_url": "/",
   "scope": "/",
-  "display": "standalone",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone", "minimal-ui"],
   "orientation": "any",
-  "background_color": "#0b0c0e",
-  "theme_color": "#0b0c0e",
+  "background_color": "#121513",
+  "theme_color": "#121513",
   "icons": [
     { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
   ]

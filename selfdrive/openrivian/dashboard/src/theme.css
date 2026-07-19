@@ -85,8 +85,15 @@ body {
 .shell {
   position: relative; /* anchors the openpilot alert banner */
   height: 100vh;
+  height: 100dvh; /* fullscreen PWA: track the real dynamic viewport */
   display: grid;
-  grid-template-rows: var(--strip-h) 1fr var(--dock-h);
+  /* fullscreen display mode + viewport-fit=cover extends under notches and the
+     gesture bar; the chrome rows absorb the safe-area insets so content never
+     hides beneath system UI (env() resolves to 0 everywhere else) */
+  grid-template-rows:
+    calc(var(--strip-h) + env(safe-area-inset-top, 0px))
+    1fr
+    calc(var(--dock-h) + env(safe-area-inset-bottom, 0px));
   background:
     radial-gradient(120% 60% at 50% -12%, var(--canvas-vig), transparent 62%),
     var(--canvas);
@@ -97,7 +104,7 @@ body {
 /* ---------------- status strip ---------------- */
 .strip {
   display: flex; align-items: center; gap: 12px;
-  padding: 0 clamp(16px, 2.5vw, 32px);
+  padding: env(safe-area-inset-top, 0px) clamp(16px, 2.5vw, 32px) 0;
   border-bottom: 1px solid var(--line-soft);
   background: color-mix(in srgb, var(--canvas) 72%, transparent);
   backdrop-filter: blur(16px);
@@ -136,7 +143,7 @@ button.chip:focus-visible { outline: 2px solid var(--yellow); outline-offset: 2p
 /* ---------------- dock ---------------- */
 .dock {
   display: flex; align-items: center; justify-content: center; gap: 8px;
-  padding: 10px clamp(16px, 2.5vw, 32px);
+  padding: 10px clamp(16px, 2.5vw, 32px) calc(10px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid var(--line-soft);
   background: color-mix(in srgb, var(--canvas) 78%, transparent);
   backdrop-filter: blur(18px);
