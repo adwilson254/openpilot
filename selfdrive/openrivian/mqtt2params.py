@@ -151,8 +151,11 @@ def main():
     logging.info("[*] Starting Settings Publish Bridge (read-only)...")
 
     if mqtt is None:
-        logging.error("Missing paho-mqtt. Gracefully exiting mqtt2params.")
-        return
+        # Do NOT exit: an exit loop's running=False windows raise openpilot's
+        # processNotRunning NoEntry and blocked engagement on-vehicle (2026-07-17).
+        logging.error("Missing paho-mqtt -- idling (daemon stays up, does nothing).")
+        while True:
+            time.sleep(60)
 
     client = build_client()
     client.on_connect = on_connect

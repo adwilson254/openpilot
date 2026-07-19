@@ -59,6 +59,18 @@ async def run_broker():
         await broker.shutdown()
         print("[*] MQTT Broker shutdown.")
 
+def _idle_forever(reason):
+    # A missing dependency must NOT exit: the manager restarts exited always-run
+    # processes, and the running=False windows of that crash loop raise openpilot's
+    # processNotRunning NoEntry (blocked engagement on-vehicle, 2026-07-17). The
+    # selfdrived ignore-list is the primary guard; idling here removes the restart
+    # churn and keeps managerState honest.
+    logging.error(f"{reason} -- idling (daemon stays up, does nothing).")
+    import time
+    while True:
+        time.sleep(60)
+
+
 def main():
     # Low priority for THIS daemon only (safe here: we are in the forked child).
     try:
@@ -67,8 +79,7 @@ def main():
         pass
 
     if Broker is None:
-        logging.error("Missing amqtt. Gracefully exiting mqttd.")
-        return
+        _idle_forever("Missing amqtt; MQTT broker unavailable")
 
     try:
         asyncio.run(run_broker())

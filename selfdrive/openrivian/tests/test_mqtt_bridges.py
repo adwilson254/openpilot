@@ -130,7 +130,38 @@ def test_mqttd_config_is_ram_only_and_anonymous():
     assert "persistence" not in cfg
 
 
-def test_mqttd_exits_gracefully_without_broker(monkeypatch):
-    monkeypatch.setattr(mqttd, "Broker", None)
-    # Must return cleanly (logs and exits) rather than raising when amqtt is absent.
-    mqttd.main()
+class _IdleReached(Exception):
+    pass
+
+
+def _boom_sleep(_s):
+    raise _IdleReached()
+
+
+@pytest.mark.parametrize("mod,attr", [(mqttd, "Broker"), (cereal2mqtt, "mqtt"), (mqtt2params, "mqtt")])
+def test_missing_dependency_idles_instead_of_exiting(monkeypatch, mod, attr):
+    # CONTRACT (2026-07-17, learned on-vehicle): a missing MQTT library must NOT
+    # make the daemon exit. The manager restarts exited always-run processes and
+    # the crash loop's running=False windows raise openpilot's processNotRunning
+    # NoEntry -> "Process Not Running: mqttd, cereal2mqtt, mqtt2params" -> blocked
+    # engagement. The daemon must go idle and STAY UP instead.
+    monkeypatch.setattr(mod, attr, None)
+    monkeypatch.setattr("time.sleep", _boom_sleep)
+    with pytest.raises(_IdleReached):
+        mod.main()
+
+
+def test_selfdrived_ignores_every_openrivian_daemon():
+    # Defense in depth: even a hard-CRASHING daemon (not just missing-dep) must
+    # never gate engagement. selfdrived's processNotRunning check must ignore all
+    # OpenRivian daemons -- driven from SERVICE_DISABLE_KEYS so adding a sixth
+    # daemon fails this test until it is added to the ignore list too.
+    import pathlib
+    import re
+    from selfdrive.openrivian.process_gating import SERVICE_DISABLE_KEYS
+    src = pathlib.Path("selfdrive/selfdrived/selfdrived.py").read_text()
+    m = re.search(r"self\.ignored_processes\s*=\s*\{([^}]*)\}", src)
+    assert m, "selfdrived.py ignored_processes set not found"
+    ignored = m.group(1)
+    for daemon in SERVICE_DISABLE_KEYS:
+        assert f"'{daemon}'" in ignored, f"{daemon} missing from selfdrived.ignored_processes"
