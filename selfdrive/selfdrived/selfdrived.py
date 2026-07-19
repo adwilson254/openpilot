@@ -147,7 +147,12 @@ class SelfdriveD(CruiseHelper):
     self.state_machine = StateMachine()
     self.rk = Ratekeeper(100, print_delay_threshold=None)
 
-    self.ignored_processes = {'mapd', }
+    # OpenRivian: the telemetry daemons are non-safety accessories and must NEVER
+    # gate engagement. Without this, a crash/exit-looping daemon (e.g. its MQTT
+    # library missing from the device env) raises processNotRunning -> NoEntry
+    # "Process Not Running: mqttd, cereal2mqtt, mqtt2params" and blocks self-drive
+    # (observed on-vehicle 2026-07-17). Same pattern sunnypilot uses for mapd.
+    self.ignored_processes = {'mapd', 'openriviand', 'mqttd', 'cereal2mqtt', 'mqtt2params', 'webd'}
 
     # Determine startup event
     is_remote = build_metadata.openpilot.comma_remote or build_metadata.openpilot.sunnypilot_remote

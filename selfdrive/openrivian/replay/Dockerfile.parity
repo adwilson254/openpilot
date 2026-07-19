@@ -1,0 +1,60 @@
+# Tier 3 -- Linux/arm64 OS-parity test image for the OpenRivian daemons.
+#
+# On Apple Silicon this builds and runs as NATIVE arm64 Linux (no QEMU), giving
+# AGNOS-like OS + libc + Python behavior at near-native speed. It runs the same
+# hermetic + replay suite that CI runs, catching Linux-only breakage and
+# dependency drift before it reaches the comma.
+#
+# It deliberately does NOT build the full openpilot stack (scons/cereal/model):
+# the OpenRivian daemons are pure-Python message plumbing and the suite mocks
+# cereal, so this image stays small and fast. It also does not run the
+# production-dependency check (test_dependencies.py) -- that verifies the FULL
+# device env (flask/fastapi/cereal/...), which is out of scope for an OS-parity
+# image. Use CI or a device for full-stack parity.
+#
+# Build + run from the repo root with docker OR podman (see run_parity.sh):
+#   podman build --platform linux/arm64 -f selfdrive/openrivian/replay/Dockerfile.parity -t openrivian-parity .
+#   podman run --rm --platform linux/arm64 openrivian-parity
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends python3 python3-pip python3-venv && \
+    rm -rf /var/lib/apt/lists/*
+
+# Lightweight test deps only -- mirrors the CI "openrivian tests" job. No uv sync,
+# no native builds. amqtt is intentionally omitted (conftest stubs it).
+RUN python3 -m venv /venv && \
+    /venv/bin/pip install --no-cache-dir paho-mqtt pytest pyyaml tomli requests
+
+ENV PATH="/venv/bin:$PATH"
+WORKDIR /work
+
+# Copy only the Python subtree needed to run the suite -- NOT the dashboard
+# (node_modules/dist) or the rest of the repo, so the build context stays tiny.
+COPY selfdrive/__init__.py /work/selfdrive/__init__.py
+COPY selfdrive/openrivian/__init__.py /work/selfdrive/openrivian/__init__.py
+COPY selfdrive/openrivian/dummy.py /work/selfdrive/openrivian/dummy.py
+COPY selfdrive/openrivian/cereal2mqtt.py /work/selfdrive/openrivian/cereal2mqtt.py
+COPY selfdrive/openrivian/mqtt2params.py /work/selfdrive/openrivian/mqtt2params.py
+COPY selfdrive/openrivian/mqttd.py /work/selfdrive/openrivian/mqttd.py
+COPY selfdrive/openrivian/webd.py /work/selfdrive/openrivian/webd.py
+COPY selfdrive/openrivian/process_gating.py /work/selfdrive/openrivian/process_gating.py
+# Whitelist inputs read by mqtt2params at import (tracked files; needed so the
+# real-param test computes a non-empty whitelist).
+COPY selfdrive/openrivian/dashboard/src/assets/settings_ui.json /work/selfdrive/openrivian/dashboard/src/assets/settings_ui.json
+COPY sunnypilot/sunnylink/params_metadata.json /work/sunnypilot/sunnylink/params_metadata.json
+COPY selfdrive/openrivian/api /work/selfdrive/openrivian/api
+COPY selfdrive/openrivian/scripts /work/selfdrive/openrivian/scripts
+COPY selfdrive/openrivian/tests /work/selfdrive/openrivian/tests
+COPY selfdrive/openrivian/replay /work/selfdrive/openrivian/replay
+
+# Same invocation as CI: neutralize the repo's strict addopts and scope the
+# conftest to the openrivian tests so the compiled-params conftest is skipped.
+CMD ["bash", "-lc", "\
+    python -m pytest selfdrive/openrivian/tests/ \
+      -o addopts='' --confcutdir=selfdrive/openrivian/tests -q \
+      --ignore=selfdrive/openrivian/tests/test_dependencies.py"]
