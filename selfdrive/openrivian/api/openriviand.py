@@ -33,6 +33,36 @@ ENERGY_TOPICS = {
     "charger_state": "openrivian/energy/charger_state",
 }
 
+# Stable companion-app address. The Rivian vehicle hotspot hands out a RANDOM
+# subnet on nearly every start, so any bookmark/installed app pinned to the DHCP
+# address goes stale. Link-local (RFC 3927) traffic is delivered on-link without
+# the hotspot's router, so the comma claims a FIXED alias alongside whatever DHCP
+# gives it, and clients reach http://169.254.71.71:8081 on any subnet, forever.
+# `ip addr replace` is idempotent; passwordless sudo is available on the device.
+STABLE_IP_CIDR = "169.254.71.71/16"
+STABLE_IP_IFACE = "wlan0"
+STABLE_IP_INTERVAL_S = 30.0
+
+
+def ensure_stable_ip(iface=STABLE_IP_IFACE, cidr=STABLE_IP_CIDR, runner=None):
+    """Idempotently (re)assert the fixed link-local alias on the Wi-Fi interface.
+
+    Returns True when the alias is in place, False otherwise. Never raises and
+    never spams: callers gate how often it runs. On PC/CI (no wlan0) it is a
+    quiet no-op, so the daemon behaves identically in tests and on the desk.
+    """
+    if not os.path.exists(f"/sys/class/net/{iface}"):
+        return False
+    try:
+        import subprocess
+        run = runner or subprocess.run
+        res = run(["sudo", "-n", "ip", "addr", "replace", cidr, "dev", iface],
+                  capture_output=True, timeout=5)
+        return res.returncode == 0
+    except Exception as e:
+        cloudlog.debug(f"openriviand: stable-ip assert failed: {e}")
+        return False
+
 
 def step(params):
     # Legacy per-tick check kept for compatibility (and as the auth probe):
@@ -118,11 +148,25 @@ def main():
     api = None
     vehicle_id = None
     last_fetch = 0.0
+    last_ip_assert = 0.0
+    ip_ok_logged = False
 
     while True:
         authenticated = step(params)
 
         now = time.monotonic()
+
+        # Keep the stable companion address alive across hotspot reconnects and
+        # the Rivian's random-subnet DHCP churn.
+        if (now - last_ip_assert) >= STABLE_IP_INTERVAL_S:
+            last_ip_assert = now
+            ok = ensure_stable_ip()
+            if ok and not ip_ok_logged:
+                cloudlog.info(f"openriviand: stable companion IP active at {STABLE_IP_CIDR.split('/')[0]}")
+                ip_ok_logged = True
+            elif not ok:
+                ip_ok_logged = False
+
         if authenticated and (now - last_fetch) >= ENERGY_FETCH_INTERVAL_S:
             last_fetch = now
             try:
