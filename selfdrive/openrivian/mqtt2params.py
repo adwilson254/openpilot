@@ -1,8 +1,18 @@
 #!/usr/bin/env python3
+# NOTE: os.nice(19) must only be called inside main(), never at module level.
+# The process manager pre-imports every daemon module inside the manager process
+# (manager_init -> prepare -> importlib.import_module) BEFORE forking children, so a
+# module-level nice() permanently demotes manager and the ENTIRE openpilot stack
+# (root cause of the 2026-07 "TAKE CONTROL IMMEDIATELY / Communication Issue" storms).
+# Guarded by tests/test_no_module_level_nice.py.
+import os
 import time
 import json
 import logging
-import paho.mqtt.client as mqtt
+try:
+    import paho.mqtt.client as mqtt
+except ImportError:
+    mqtt = None
 
 import os
 import sys
@@ -15,50 +25,78 @@ MQTT_PORT = 1883
 
 params = Params()
 
-PARAMS_META_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../sunnypilot/sunnylink/params_metadata.json"))
-try:
-    with open(PARAMS_META_PATH, "r") as f:
-        metadata = json.load(f)
-        PARAMS_WHITELIST = list(metadata.keys())
-except Exception as e:
-    logging.error(f"Failed to load params metadata: {e}")
-    PARAMS_WHITELIST = []
+_HERE = os.path.dirname(__file__)
+PARAMS_META_PATH = os.path.abspath(os.path.join(_HERE, "../../sunnypilot/sunnylink/params_metadata.json"))
+SETTINGS_UI_PATH = os.path.abspath(os.path.join(_HERE, "dashboard/src/assets/settings_ui.json"))
+
+# This daemon is READ-ONLY: it publishes current param values to MQTT and never writes
+# params back. This exposure denylist governs what must NEVER be published to the broker
+# -- persistent state/blobs and device identity (calibration, model, driver monitoring,
+# tokens, serials) that should not leave the device. (Historically this was a *write*
+# denylist: a too-broad whitelist once let params like CalibrationParams be set over
+# MQTT, which corrupts persistent state that survives reboots and can brick engagement
+# with a "take over" alert. Removing the write path eliminates that risk at the source;
+# the denylist stays as defense-in-depth against leaking sensitive params.)
+DENY_EXACT = {
+    "CalibrationParams", "LiveCalibration", "LiveParameters", "LiveTorqueParameters",
+    "LiveDelay", "ControlsReady", "FirmwareQueryDone", "CompletedTrainingVersion",
+    "HasAcceptedTerms", "DongleId", "HardwareSerial", "IsOnroad", "IsOffroad",
+    "ObdMultiplexingEnabled", "ObdMultiplexingChanged", "AlwaysOnDM",
+}
+DENY_PREFIX = ("Offroad_", "ModelManager_", "ModelRunnerType", "Live", "CarParams", "Calibration", "Camera")
+
+
+def _is_safe_to_publish(key):
+    return key not in DENY_EXACT and not key.startswith(DENY_PREFIX)
+
+
+def _ui_exposed_keys(path):
+    """Keys the dashboard settings UI actually exposes (settings_ui.json)."""
+    keys = set()
+
+    def walk(o):
+        if isinstance(o, dict):
+            k = o.get("key")
+            if isinstance(k, str):
+                keys.add(k)
+            for v in o.values():
+                walk(v)
+        elif isinstance(o, list):
+            for v in o:
+                walk(v)
+
+    with open(path, "r") as f:
+        walk(json.load(f))
+    return keys
+
+
+def _build_whitelist():
+    try:
+        with open(PARAMS_META_PATH, "r") as f:
+            known = set(json.load(f).keys())
+    except Exception as e:
+        logging.error(f"Failed to load params metadata: {e}")
+        return []
+    # Only publish params the dashboard UI actually offers; fall back to all known
+    # params if the UI schema is unavailable. Either way, strip the exposure denylist.
+    try:
+        allowed = _ui_exposed_keys(SETTINGS_UI_PATH) & known
+    except Exception as e:
+        logging.warning(f"settings_ui.json unavailable ({e}); restricting to denylist-filtered metadata")
+        allowed = known
+    return sorted(k for k in allowed if _is_safe_to_publish(k))
+
+
+PARAMS_WHITELIST = _build_whitelist()
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
-        logging.info("[+] Connected to MQTT broker for Settings Sync")
-        client.subscribe("openrivian/settings/set/#")
-        # Publish initial states
+        logging.info("[+] Connected to MQTT broker for Settings Publish (read-only)")
+        # Read-only: publish current states. We never subscribe to 'set' topics, so
+        # nothing can write params back through this bridge.
         publish_all_params(client)
     else:
         logging.error(f"[-] Failed to connect: {rc}")
-
-def on_message(client, userdata, msg):
-    try:
-        param_name = msg.topic.split("/")[-1]
-        
-        # Only allow setting whitelisted params to prevent dangerous overwrites
-        if param_name not in PARAMS_WHITELIST:
-            logging.warning(f"Attempted to set non-whitelisted param: {param_name}")
-            return
-            
-        payload = json.loads(msg.payload.decode())
-        val = payload.get("value")
-        
-        # Writes Enabled
-        logging.info(f"Writing Param '{param_name}' to {val}")
-        if isinstance(val, bool):
-            params.put_bool(param_name, val)
-        elif isinstance(val, (int, float)):
-            params.put(param_name, str(val).encode('utf-8'))
-        elif isinstance(val, str):
-            params.put(param_name, val.encode('utf-8'))
-        
-        # Echo the new status back to MQTT so UI updates
-        client.publish(f"openrivian/settings/status/{param_name}", json.dumps({"value": val}), retain=True)
-        
-    except Exception as e:
-        logging.error(f"Failed to set param {msg.topic}: {e}")
 
 last_published_values = {}
 
@@ -95,19 +133,35 @@ def publish_all_params(client):
             client.publish(f"openrivian/settings/status/{param}", json.dumps({"value": val}, default=str), retain=True)
             last_published_values[param] = val
 
+def build_client():
+    # Be explicit about the callback API version. paho-mqtt 2.x still defaults to
+    # VERSION1 but emits a DeprecationWarning on every start (noisy in device logs),
+    # and a future paho 3.x may drop the implicit default entirely. Passing it
+    # explicitly keeps our VERSION1-style callbacks valid and future-proof.
+    return mqtt.Client(mqtt.CallbackAPIVersion.VERSION1)
+
 def main():
+    # Low priority for THIS daemon only (safe here: we are in the forked child).
     try:
         os.nice(19)
-    except Exception as e:
-        logging.warning(f"Failed to set nice value: {e}")
+    except Exception:
+        pass
 
     logging.basicConfig(level=logging.INFO)
-    logging.info("[*] Starting Settings Sync Bridge...")
+    logging.info("[*] Starting Settings Publish Bridge (read-only)...")
 
-    client = mqtt.Client()
+    if mqtt is None:
+        # Do NOT exit: an exit loop's running=False windows raise openpilot's
+        # processNotRunning NoEntry and blocked engagement on-vehicle (2026-07-17).
+        logging.error("Missing paho-mqtt -- idling (daemon stays up, does nothing).")
+        while True:
+            time.sleep(60)
+
+    client = build_client()
     client.on_connect = on_connect
-    client.on_message = on_message
-    
+    # Read-only by design: no on_message handler is registered and we never subscribe
+    # to 'set' topics, so this bridge cannot write params.
+
     connected = False
     while not connected:
         try:
@@ -116,12 +170,12 @@ def main():
         except ConnectionRefusedError:
             time.sleep(2)
 
-    # Loop forever, listening for sets and occasionally polling for changes
+    # Loop forever, periodically publishing current param values.
     client.loop_start()
-    
+
     while True:
         publish_all_params(client)
-        time.sleep(5)  # Poll params every 5 seconds to catch changes made from the UI in the car
+        time.sleep(5)  # Poll params every 5 seconds to reflect changes made from the car UI
 
 if __name__ == '__main__':
     main()
