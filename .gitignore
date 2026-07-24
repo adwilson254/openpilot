@@ -96,3 +96,7 @@ SKILL.md
 !.idea/tools/*
 !.run/*
 .venv_fallback/
+
+# macOS Finder/duplication artifacts (e.g. "file 2.md", ".gitignore 2")
+* [0-9]
+* [0-9].*
