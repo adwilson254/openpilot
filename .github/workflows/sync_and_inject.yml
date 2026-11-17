@@ -112,16 +112,7 @@ jobs:
             git diff --staged --quiet || git commit -m "[bot] Inject OpenRivian hooks"
             git push --no-verify origin dev-test
           else
-            git merge --abort
-            echo "::warning::clean -> dev-test merge has conflicts; clean is already updated. Not pushing dev-test."
-            BRANCH="sync/dev-test-$(date +%Y%m%d)"
-            git branch -f "$BRANCH" clean
-            # This push is the clean tip. If it only updates a new branch and
-            # that tip changes workflow files relative to the base, GITHUB_TOKEN
-            # may reject it. A rejected PR push must not fail the clean sync.
-            git push --no-verify -f origin "$BRANCH" \
-              && gh pr create --base dev-test --head "$BRANCH" \
-                --title "Sync clean -> dev-test ($(date +%Y-%m-%d))" \
-                --body "Automated clean -> dev-test merge hit conflicts. \`clean\` is already at AdventurePilot stg-src. Resolve and merge; OpenRivian injection was skipped this run." \
-              || echo "Could not open a dev-test sync PR (workflow-file push or an existing PR). clean itself was updated."
+            echo "::warning::clean -> dev-test merge has conflicts. clean is already updated. dev-test was not pushed."
+            git diff --name-only --diff-filter=U || true
+            git merge --abort || git reset --hard HEAD
           fi

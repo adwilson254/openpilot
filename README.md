@@ -13,7 +13,7 @@ This is a fork of sunnypilot specifically designed for integrating Rivian vehicl
 ### Development Workflow
 To contribute a new feature:
 1. Branch off `clean` (e.g., `git checkout -b feature/my-new-feature origin/clean`).
-2. Add your feature branch name to the `FEATURE_BRANCHES` array in `.github/workflows/openrivian_tests.yml`.
+2. Add your feature branch name to the `FEATURE_BRANCHES` array and to the rebuild job's branch list in `.github/workflows/openrivian_tests.yml`.
 3. Commit and push. GitHub Actions will automatically test your branch, combine it with the others into `dev-test`, run integration tests, and then fast-forward `dev` for Comma deployment.
 
 ### Compute Safety (os.nice)
