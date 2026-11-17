@@ -4,7 +4,7 @@ This is a fork of sunnypilot specifically designed for integrating Rivian vehicl
 ## Branch Topology
 
 **IMPORTANT**: This repository uses a highly structured, automated branching strategy.
-- `clean`: The pristine base state. Active development is built upon this branch.
+- `clean`: Pristine mirror of AdventurePilot `stg-src` (the source of the installable `stg` prebuilt). The nightly sync fast-forwards it. Active development is built upon this branch.
 - `dev-test`: CI/CD automated staging ground where feature branches are combined and tested for compute safety.
 - `dev`: The production release candidate. **This is the branch that runs on the Comma device in the vehicle.**
 - `can-debug`: Isolated, experimental CAN sniffing utilities. **Never driven.**
