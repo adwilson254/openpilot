@@ -32,6 +32,12 @@ def test_link_off_until_a_mode_is_chosen(tmp_path):
   assert jetlink_adapter.link_on() is False
 
 
+def test_hooks_stay_one_object():
+  # prepare() and attach() are separate calls. A new facade each time drops the join.
+  jetlink_adapter.hooks.cache_clear()
+  assert jetlink_adapter.hooks() is jetlink_adapter.hooks()
+
+
 def test_adapter_matches_jetlink():
   assert check_adapter(jetlink_adapter, heavy=HEAVY) == []
 

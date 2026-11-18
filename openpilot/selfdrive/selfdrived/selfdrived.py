@@ -250,7 +250,7 @@ class SelfdriveD(CruiseHelper):
       return
 
     if self.jetlink_swaps is not None:
-      model_ok = self.sm.valid['modelV2']
+      model_ok = self.sm.alive['modelV2'] and self.sm.valid['modelV2']
       flags = self.jetlink_swaps.update(model_ok, model_ok and self.sm['modelV2'].big,
                                         self.enabled or self.mads.enabled)
       if flags.no_entry:

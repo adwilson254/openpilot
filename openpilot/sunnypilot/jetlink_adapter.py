@@ -10,6 +10,7 @@ need them.
 """
 from __future__ import annotations
 
+import functools
 import logging
 import os
 
@@ -17,15 +18,17 @@ API = 4
 OWNER = 'jetlinkd'
 MODES = ('off', 'usb', 'ios')
 
+# jetlink.openpilot.status.PHASES. An unknown phase is shown as jetlink wrote it.
 _PHASE_TEXT = {
   'off': 'off',
-  'preparing': 'preparing the link',
-  'waiting': 'waiting for the host',
-  'joining': 'joining',
-  'loading': 'loading the model',
-  'ready': 'ready',
-  'running': 'running the big model',
   'unavailable': 'unavailable',
+  'preparing': 'preparing the link',
+  'connecting': 'connecting',
+  'prepared': 'ready',
+  'waiting': 'waiting for the host',
+  'reconnecting': 'reconnecting',
+  'active': 'running the big model',
+  'failed': 'failed',
 }
 
 
@@ -155,7 +158,10 @@ def _adapter_class():
   return Adapter
 
 
+@functools.cache
 def hooks():
+  """One facade per process. prepare() and attach() have to be the same one,
+  or the join is thrown away and modeld keeps driving the small model."""
   try:
     from jetlink.openpilot.hooks import Hooks
   except ModuleNotFoundError as error:
@@ -163,7 +169,7 @@ def hooks():
   except Exception as error:
     return _NoJetlink(f"jetlink failed to import: {error}")
   try:
-    return Hooks(API, _adapter_class, link_on=link_on, log=_cloudlog)
+    return Hooks(API, adapter, link_on=link_on, log=_cloudlog)
   except Exception as error:
     return _NoJetlink(f"jetlink is not usable: {error}")
 
