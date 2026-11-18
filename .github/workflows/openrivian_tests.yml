@@ -51,8 +51,15 @@ jobs:
     concurrency:
       group: build-dev
       cancel-in-progress: true
-    # Rebuild + test on every feature-branch push (excludes deploy/base branches and can-debug).
-    if: success() && github.ref != 'refs/heads/can-decode' && github.ref != 'refs/heads/can-debug' && github.ref != 'refs/heads/dev-test' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/clean' && github.event_name == 'push'
+    # Only the branches in FEATURE_BRANCHES rebuild the shared dev-test.
+    # A push of any other branch (workflow fixes, experiments) must not check
+    # clean out and try to merge api/mqtt/web-dashboard into it.
+    if: |
+      success() && github.event_name == 'push' && (
+        github.ref == 'refs/heads/api' ||
+        github.ref == 'refs/heads/web-dashboard' ||
+        github.ref == 'refs/heads/mqtt'
+      )
     steps:
       - name: Checkout Clean
         uses: actions/checkout@v4
@@ -137,7 +144,12 @@ jobs:
     concurrency:
       group: build-dev
       cancel-in-progress: true
-    if: success() && github.ref != 'refs/heads/can-decode' && github.ref != 'refs/heads/can-debug' && github.ref != 'refs/heads/dev-test' && github.ref != 'refs/heads/dev' && github.ref != 'refs/heads/clean' && github.event_name == 'push'
+    if: |
+      success() && github.event_name == 'push' && (
+        github.ref == 'refs/heads/api' ||
+        github.ref == 'refs/heads/web-dashboard' ||
+        github.ref == 'refs/heads/mqtt'
+      )
     steps:
       - name: Checkout dev-test
         uses: actions/checkout@v4

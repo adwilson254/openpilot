@@ -1,5 +1,13 @@
 name: Nightly Upstream Sync & Inject
 
+# Fast-forward `clean` onto AdventurePilot `stg-src`, the source branch the
+# installable `stg` prebuilt is built from. `stg` itself is a force-pushed
+# orphan prebuilt (no history, no SConstruct, empty `prebuilt` marker). Feature
+# CI checks `clean` out and can promote the result onto `dev` (the branch in
+# the car), so `clean` tracks `stg-src`, not that prebuilt.
+#
+# Schedule fires only from the default branch (`dev`). This file has to live here.
+
 on:
   schedule:
     - cron: '0 0 * * *'
@@ -12,91 +20,99 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - name: Checkout OpenRivian (clean branch)
+      - name: Checkout clean
         uses: actions/checkout@v4
         with:
           ref: clean
           fetch-depth: 0
-          # Upstream (apdev/dev) now ships .github/workflows/ files that flow into
-          # clean/dev-test. The default GITHUB_TOKEN is NOT allowed to push commits that
-          # add/modify workflow files, so pushing clean/dev-test fails once those land.
-          # Use a PAT with the `workflow` scope (repo secret SYNC_PAT); fall back to
-          # GITHUB_TOKEN when it isn't set (works only while no workflow files change).
-          token: ${{ secrets.SYNC_PAT || secrets.GITHUB_TOKEN }}
           persist-credentials: true
-          
+          # Do not pass secrets.SYNC_PAT into checkout. That PAT is the git
+          # credential for this step; once it expired, every scheduled run died
+          # here with "could not read Username for 'https://github.com'" and
+          # never fetched upstream. The default GITHUB_TOKEN can read this repo
+          # and can push `clean` as long as the push does not modify workflow files.
+
       - name: Setup Git User
         run: |
           git config --global user.name 'github-actions[bot]'
           git config --global user.email 'github-actions[bot]@users.noreply.github.com'
 
-      - name: Fetch Upstream
+      - name: Fetch AdventurePilot stg-src
         run: |
-          # Upstream repo was renamed: ap-dev -> AdventurePilotDev/AdventurePilot, and its
-          # active branch ap-dev -> dev. Old URLs (ap-dev, openpilot) still redirect, but
-          # track the canonical name so a future rename of the redirect doesn't break us.
           git remote add upstream https://github.com/adventurepilotdev/adventurepilot.git
-          git fetch upstream dev
-          
-      - name: Sync clean branch (fast-forward, else open PR)
+          git fetch --no-tags upstream stg-src
+
+      - name: Sync clean to stg-src
         id: sync
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           git checkout clean
-          if git merge upstream/dev --ff-only; then
+          upstream=$(git rev-parse upstream/stg-src)
+          short=$(git rev-parse --short "$upstream")
+
+          if git merge-base --is-ancestor "$upstream" HEAD; then
+            echo "clean already contains AdventurePilot stg-src $short"
             echo "synced=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "::warning::clean cannot fast-forward to upstream/dev (upstream diverged). Opening a sync PR instead of silently skipping."
-            BRANCH="sync/dev-$(date +%Y%m%d)"
-            git branch -f "$BRANCH" upstream/dev
-            git push --no-verify -f origin "$BRANCH"
-            gh pr create --base clean --head "$BRANCH" \
-              --title "Nightly sync: dev -> clean ($(date +%Y-%m-%d))" \
-              --body "Automated fast-forward sync failed because upstream/dev diverged from clean. Review and merge this PR to bring clean current. dev-test injection/push was skipped for this run." \
-              || echo "A sync PR for this branch may already exist; leaving it in place."
-            echo "synced=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
 
-      # Push clean as soon as the fast-forward succeeds, BEFORE touching dev-test.
-      # This decouples the (safe, always-fast-forward) clean sync from the dev-test
-      # injection, which can conflict. Previously the single "Push branches" step ran
-      # after injection, so a dev-test merge conflict discarded a good clean sync and
-      # left clean stuck behind upstream.
-      - name: Push clean
-        # --no-verify skips the git-lfs pre-push hook. The repo's LFS objects live on an
-        # upstream LFS remote this fork can't push to ("Host key verification failed"),
-        # and clean only mirrors upstream, so we push commits/pointers without LFS upload.
-        if: steps.sync.outputs.synced == 'true'
-        run: git push --no-verify origin clean
+          # Prefer a pure fast-forward so `clean` stays identical to stg-src.
+          # GITHUB_TOKEN refuses a push that changes .github/workflows (there is
+          # no workflows permission on that token). When that happens, merge
+          # instead and keep the workflow files already on clean. The result
+          # still has stg-src as a parent, so the next run sees it as synced
+          # until stg-src moves again.
+          synced=false
+          if git merge --ff-only "$upstream"; then
+            if git push --no-verify origin clean; then
+              synced=true
+              echo "clean fast-forwarded to stg-src $short"
+            else
+              echo "::warning::fast-forward push was rejected (workflow files changed). Merging and keeping this fork's workflow files."
+              git reset --hard origin/clean
+            fi
+          else
+            echo "::warning::clean cannot fast-forward to stg-src $short. Merging and keeping this fork's workflow files."
+            git merge --abort || git reset --hard origin/clean
+          fi
 
+          if [ "$synced" = "false" ]; then
+            ours=$(git rev-parse HEAD)
+            git merge --no-ff --no-commit "$upstream" || true
+            # Exactly the workflow tree from clean, not AdventurePilot's CI.
+            git rm -rf --quiet --ignore-unmatch .github/workflows
+            git checkout "$ours" -- .github/workflows
+            git add -A .github/workflows
+            if git diff --name-only --diff-filter=U | grep -q .; then
+              echo "::error::clean could not take stg-src $short. Conflicted paths:"
+              git diff --name-only --diff-filter=U
+              git merge --abort || git reset --hard origin/clean
+              exit 1
+            fi
+            git commit --no-edit -m "nightly: sync AdventurePilot stg-src ($short)"
+            git push --no-verify origin clean
+            echo "clean merged stg-src $short (workflow files unchanged)"
+          fi
+          echo "synced=true" >> "$GITHUB_OUTPUT"
+
+      # Push of clean already happened above, before dev-test is touched, so a
+      # dev-test conflict cannot discard a good clean sync.
       - name: Inject into dev-test branch
         if: steps.sync.outputs.synced == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Merge the freshly-synced clean into dev-test, then run the injection.
+          set -euo pipefail
           git checkout dev-test || git checkout -b dev-test
           if git merge --no-edit clean; then
-            # Run the Python injection script
             python3 selfdrive/ui/openrivian/scripts/inject.py
-
-            # Add any injected changes and commit
             git add system/ui/spinner.py
             git diff --staged --quiet || git commit -m "[bot] Inject OpenRivian hooks"
-
             git push --no-verify origin dev-test
           else
-            # Conflicts (e.g. pyproject.toml / uv.lock when clean jumps forward): don't
-            # fail the job or leave a broken merge. clean is already pushed above; open a
-            # PR so the dev-test reconciliation can be done by hand.
-            git merge --abort
-            echo "::warning::clean->dev-test merge has conflicts; opening a PR for manual resolution."
-            BRANCH="sync/dev-test-$(date +%Y%m%d)"
-            git branch -f "$BRANCH" clean
-            git push --no-verify -f origin "$BRANCH"
-            gh pr create --base dev-test --head "$BRANCH" \
-              --title "Sync clean -> dev-test ($(date +%Y-%m-%d))" \
-              --body "Automated clean->dev-test merge hit conflicts (e.g. pyproject.toml / uv.lock). Resolve and merge; OpenRivian injection was skipped this run." \
-              || echo "A dev-test sync PR may already exist; leaving it in place."
+            echo "::warning::clean -> dev-test merge has conflicts. clean is already updated. dev-test was not pushed."
+            git diff --name-only --diff-filter=U || true
+            git merge --abort || git reset --hard HEAD
           fi
