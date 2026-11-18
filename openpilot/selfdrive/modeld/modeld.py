@@ -34,6 +34,7 @@ from openpilot.common.file_chunker import open_file_chunked
 from openpilot.common.hardware.usb import CHESTNUT_USB_IDS
 from openpilot.selfdrive.modeld.constants import ModelConstants, Plan
 from openpilot.selfdrive.modeld.helpers import chestnut_present, chestnut_compiled, chestnut_ready, modeld_pkl_path, load_oob
+from openpilot.sunnypilot import jetlink_adapter
 
 from openpilot.sunnypilot.livedelay.helpers import get_lat_delay
 from openpilot.sunnypilot.modeld_v2.modeld_base import ModelStateBase
@@ -262,6 +263,8 @@ def main(demo=False):
   else:
     params.remove("ChestnutActive")
 
+  # before realtime: a GPU thread started here would inherit SCHED_FIFO on core 7
+  jetlink_adapter.prepare(CHESTNUT)
   config_realtime_process(7, 54)
 
   # visionipc clients
@@ -315,6 +318,7 @@ def main(demo=False):
     model = small_model
   params.put_bool("ChestnutLoading", False)
   assert model is not None
+  model = jetlink_adapter.attach(model, small_model, vipc_client_main.width, vipc_client_main.height)
   cloudlog.warning(f"models loaded in {time.monotonic() - st:.1f}s, modeld starting")
 
   # messaging
@@ -419,6 +423,8 @@ def main(demo=False):
     run_count = run_count + 1
 
     frame_drop_ratio = frames_dropped / (1 + frames_dropped)
+    # a host that drops camera frames hands the drive back; the joined model reads this
+    model.frame_drop_ratio = frame_drop_ratio
 
     bufs = {name: buf_extra if 'big' in name else buf_main for name in model.vision_input_names}
     transforms = {name: model_transform_extra if 'big' in name else model_transform_main for name in model.vision_input_names}
@@ -450,6 +456,8 @@ def main(demo=False):
         chestnut_state.big = False
       run_count = 0
       model_output = None
+    if jetlink_adapter.handed_over(model):
+      run_count = 0
     mt2 = time.perf_counter()
     model_execution_time = mt2 - mt1
 

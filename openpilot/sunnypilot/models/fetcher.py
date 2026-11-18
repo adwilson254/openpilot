@@ -12,7 +12,7 @@ from requests.exceptions import (SSLError, RequestException, HTTPError)
 from openpilot.common.params import Params
 from openpilot.common.swaglog import cloudlog
 from openpilot.common.hardware.hw import Paths
-from openpilot.sunnypilot.models.helpers import is_bundle_version_compatible
+from openpilot.sunnypilot.models.helpers import REQUIRED_JSON_VERSION, is_bundle_version_compatible
 from openpilot.cereal import custom
 
 
@@ -226,6 +226,18 @@ class ModelFetcher:
     return not any(bundle.get("is_big") is True for bundle in bundles)
 
   def get_bundles_for_source(self, source: str) -> list[custom.ModelManagerSP.ModelBundle]:
+    if source == "chestnut":
+      try:
+        from openpilot.sunnypilot import jetlink_adapter
+        if jetlink_adapter.lists_big_models():
+          catalog = jetlink_adapter.big_catalog(REQUIRED_JSON_VERSION)
+          if catalog:
+            parsed = self.model_parser.parse_models(catalog)
+            if parsed:
+              return parsed
+      except Exception:
+        cloudlog.exception("jetlink big model catalog failed; keeping the chestnut list")
+
     if source not in self.MODEL_SOURCES:
       cloudlog.warning(f"Unknown model source: {source}")
       return []

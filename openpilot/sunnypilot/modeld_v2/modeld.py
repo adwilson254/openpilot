@@ -18,6 +18,7 @@ from tinygrad.tensor import Tensor
 import openpilot.cereal.messaging as messaging
 from openpilot.common.hardware import COMMA_HARDWARE
 from openpilot.selfdrive.modeld.helpers import chestnut_present, load_oob
+from openpilot.sunnypilot import jetlink_adapter
 from openpilot.cereal import log
 from opendbc.car.structs import car
 from openpilot.cereal.services import SERVICE_LIST
@@ -321,11 +322,14 @@ def main(demo=False):
   sentry.set_tag("daemon", PROCESS_NAME)
   cloudlog.bind(daemon=PROCESS_NAME)
   setproctitle(PROCESS_NAME)
-  config_realtime_process(7, 54)
 
   CHESTNUT = chestnut_present()
   if CHESTNUT:
     os.environ['HCQDEV_WAIT_TIMEOUT_MS'] = '3000'
+
+  # before realtime: a GPU thread started here would inherit SCHED_FIFO on core 7
+  jetlink_adapter.prepare(CHESTNUT)
+  config_realtime_process(7, 54)
 
   params = Params()
   params.put_bool("ChestnutLoading", CHESTNUT)
@@ -383,6 +387,7 @@ def main(demo=False):
     model = small_model
   params.put_bool("ChestnutLoading", False)
   assert model is not None
+  model = jetlink_adapter.attach(model, small_model, vipc_client_main.width, vipc_client_main.height)
   cloudlog.warning(f"models loaded in {time.monotonic() - st:.1f}s, modeld starting")
 
   # messaging
@@ -490,6 +495,8 @@ def main(demo=False):
     run_count = run_count + 1
 
     frame_drop_ratio = frames_dropped / (1 + frames_dropped)
+    # a host that drops camera frames hands the drive back; the joined model reads this
+    model.frame_drop_ratio = frame_drop_ratio
 
     bufs = {name: buf_extra if 'big' in name else buf_main for name in model.vision_input_names}
     transforms = {name: model_transform_extra if 'big' in name else model_transform_main for name in model.vision_input_names}
@@ -527,6 +534,8 @@ def main(demo=False):
         chestnut_state.big = False
       run_count = 0
       model_output = None
+    if jetlink_adapter.handed_over(model):
+      run_count = 0
     mt2 = time.perf_counter()
     model_execution_time = mt2 - mt1
 

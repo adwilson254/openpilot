@@ -9,7 +9,7 @@ import pyray as rl
 from openpilot.cereal import custom
 from openpilot.selfdrive.ui.mici.widgets.dialog import BigDialog
 from openpilot.sunnypilot.models.helpers import ACTIVE_BUNDLE_KEYS, get_selected_bundle
-from openpilot.selfdrive.ui.mici.widgets.button import BigButton
+from openpilot.selfdrive.ui.mici.widgets.button import BigButton, BigMultiParamToggle
 from openpilot.selfdrive.ui.ui_state import ui_state, device
 from openpilot.selfdrive.ui.sunnypilot.model_info import (active_source, big_model_state, bundles_for_source, carrying_model,
                                                            default_model_name, model_info, queued_name)
@@ -84,7 +84,9 @@ class ModelsLayoutMici(NavScroller):
     self.cancel_download_btn = BigButton(tr("cancel download"))
     self.cancel_download_btn.set_click_callback(lambda: ui_state.params.remove("ModelManager_DownloadRef"))
 
-    self.main_items = [self.current_model_info, self.select_model_btn, self.cancel_download_btn]
+    self.jetlink_btn = BigMultiParamToggle(tr("jetlink"), "JetlinkLink", [tr("Off"), tr("USB"), tr("iOS")])
+
+    self.main_items = [self.current_model_info, self.select_model_btn, self.jetlink_btn, self.cancel_download_btn]
     self._scroller.add_widgets(self.main_items)
 
   @property

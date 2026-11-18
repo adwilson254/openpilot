@@ -17,6 +17,7 @@ from openpilot.common.utils import strip_deprecated_keys
 from openpilot.common.filter_simple import FirstOrderFilter
 from openpilot.common.params import Params
 from openpilot.common.realtime import DT_HW
+from openpilot.sunnypilot import jetlink_adapter
 from openpilot.selfdrive.selfdrived.alertmanager import set_offroad_alert
 from openpilot.common.hardware import HARDWARE, COMMA_HARDWARE
 from openpilot.common.basedir import BASEDIR
@@ -298,6 +299,10 @@ def hw_state_thread(end_event, hw_queue):
     time.sleep(DT_HW)
 
 
+# how long a parked comma waits for the phone to hear it is shutting down
+JETLINK_SHUTDOWN_CAP_S = 30.
+
+
 def hardware_thread(end_event, hw_queue) -> None:
   system_stats = LinuxSystemStats()
   pm = messaging.PubMaster(['deviceState'])
@@ -316,6 +321,7 @@ def hardware_thread(end_event, hw_queue) -> None:
   off_ts: float | None = None
   started_ts: float | None = None
   started_seen = False
+  shutdown_since: float | None = None
   startup_blocked_ts: float | None = None
   thermal_status = ThermalStatus.ok
 
@@ -470,6 +476,8 @@ def hardware_thread(end_event, hw_queue) -> None:
 
     # ensure device is fully booted
     startup_conditions["device_booted"] = startup_conditions.get("device_booted", False) or HARDWARE.booted()
+    # a shutdown the phone has been told about stays offroad until it finishes or is cancelled
+    startup_conditions["not_powering_off"] = shutdown_since is None
 
     # user-forced status
     offroad_mode = params.get_bool("OffroadMode")
@@ -565,10 +573,22 @@ def hardware_thread(end_event, hw_queue) -> None:
       statlog.sample("som_power_draw", som_power_draw)
       msg.deviceState.somPowerDrawW = som_power_draw
 
-    # Check if we need to shut down
-    if power_monitor.should_shutdown(onroad_conditions["ignition"], in_car, off_ts, started_seen):
+    # Check if we need to shut down. Jetlink tells the phone first; a cancelled
+    # shutdown clears the wait, and a phone that never answers cannot hold the comma up.
+    should_shutdown = power_monitor.should_shutdown(onroad_conditions["ignition"], in_car, off_ts, started_seen)
+    if should_shutdown:
+      if shutdown_since is None:
+        shutdown_since = time.monotonic()
+    else:
+      shutdown_since = None
+    jetlink_ready = jetlink_adapter.shutdown_step(should_shutdown, f"offroad since {off_ts}")
+    cap_elapsed = shutdown_since is not None and time.monotonic() - shutdown_since >= JETLINK_SHUTDOWN_CAP_S
+    if jetlink_ready or cap_elapsed:
       cloudlog.warning(f"shutting device down, offroad since {off_ts}")
       params.put_bool("DoShutdown", True, block=True)
+
+    unavailable = jetlink_adapter.reason()
+    set_offroad_alert_if_changed("Offroad_JetlinkUnavailable", unavailable is not None, extra_text=unavailable or "")
 
     msg.deviceState.started = started_ts is not None and not offroad_mode
     msg.deviceState.startedMonoTime = int(1e9*(started_ts or 0))

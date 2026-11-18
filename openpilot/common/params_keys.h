@@ -223,6 +223,13 @@ inline static std::unordered_map<std::string, ParamKeyAttributes> keys = {
     {"ModelManager_ModelsCache", {PERSISTENT | BACKUP, JSON}},
     {"ModelManager_ModelsCache_Chestnut", {PERSISTENT | BACKUP, JSON}},
 
+    // Jetlink: the comma sends frames, a phone or a computer runs the big model
+    {"JetlinkLink", {PERSISTENT | BACKUP, INT, "0"}},
+    {"JetlinkProgress", {CLEAR_ON_MANAGER_START, JSON}},
+    {"JetlinkSpec", {PERSISTENT, JSON}},
+    {"JetlinkChargePhone", {PERSISTENT, BOOL, "0"}},
+    {"Offroad_JetlinkUnavailable", {CLEAR_ON_MANAGER_START, JSON}},
+
     // Neural Network Lateral Control
     {"NeuralNetworkLateralControl", {PERSISTENT | BACKUP, BOOL, "0"}},
 
