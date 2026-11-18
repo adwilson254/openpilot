@@ -179,6 +179,36 @@ class PythonProcess(ManagerProcess):
     self.shutting_down = False
 
 
+class RestartingPythonProcess(PythonProcess):
+  """A python process manager starts again after it exits. A quick death backs
+  off, so a crash loop does not fork twice a second. jetlinkd uses this: it
+  owns the USB gadget for the whole drive, and a dead owner must come back."""
+
+  QUICK_DEATH = 10.0
+  BACKOFF = 10.0
+  BACKOFF_MAX = 300.0
+
+  def __init__(self, *args, **kwargs):
+    super().__init__(*args, **kwargs)
+    self.started_at = 0.0
+    self.backoff = 0.0
+    self.next_start = 0.0
+
+  def start(self) -> None:
+    now = time.monotonic()
+    if self.proc is not None and self.proc.exitcode is not None:
+      if now - self.started_at < self.QUICK_DEATH:
+        self.backoff = min(self.BACKOFF_MAX, 2 * self.backoff or self.BACKOFF)
+        self.next_start = now + self.backoff
+        cloudlog.warning(f"restarting python {self.module} died quickly, waiting {self.backoff:.0f}s")
+      else:
+        self.backoff = 0.0
+      self.stop()
+    if self.proc is None and now >= self.next_start:
+      self.started_at = now
+      super().start()
+
+
 class DaemonProcess(ManagerProcess):
   """Python process that has to stay running across manager restart.
   This is used for athena so you don't lose SSH access when restarting manager."""

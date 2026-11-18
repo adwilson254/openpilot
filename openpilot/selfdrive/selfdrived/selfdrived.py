@@ -33,6 +33,7 @@ from openpilot.sunnypilot.selfdrive.car.cruise_helpers import CruiseHelper
 from openpilot.sunnypilot.selfdrive.car.intelligent_cruise_button_management.controller import IntelligentCruiseButtonManagement
 from openpilot.sunnypilot.selfdrive.selfdrived.button_state_tracker import ButtonStateTracker
 from openpilot.sunnypilot.selfdrive.selfdrived.events import EventsSP
+from openpilot.sunnypilot import jetlink_adapter
 
 REPLAY = "REPLAY" in os.environ
 SIMULATION = "SIMULATION" in os.environ
@@ -157,7 +158,8 @@ class SelfdriveD(CruiseHelper):
     self.state_machine = StateMachine()
     self.rk = Ratekeeper(100, print_delay_threshold=None)
 
-    self.ignored_processes = {'mapd', }
+    # jetlinkd owns the USB gadget. A dead owner must not block engaging; the small model keeps driving.
+    self.ignored_processes = {'mapd', jetlink_adapter.OWNER}
 
     # Determine startup event
     is_remote = build_metadata.openpilot.comma_remote or build_metadata.openpilot.sunnypilot_remote
@@ -181,6 +183,8 @@ class SelfdriveD(CruiseHelper):
     self.events_sp_prev = []
 
     self.mads = ModularAssistiveDrivingSystem(self)
+    # None when jetlink itself is missing: the swap events stay off and the small model drives
+    self.jetlink_swaps = jetlink_adapter.swap_events(DT_CTRL)
     self.icbm = IntelligentCruiseButtonManagement(self.CP, self.CP_SP)
 
     self.car_events_sp = CarSpecificEventsSP(self.CP, self.CP_SP)
@@ -244,6 +248,19 @@ class SelfdriveD(CruiseHelper):
     # Don't add any more events while in dashcam mode
     if self.CP.passive:
       return
+
+    if self.jetlink_swaps is not None:
+      model_ok = self.sm.alive['modelV2'] and self.sm.valid['modelV2']
+      flags = self.jetlink_swaps.update(model_ok, model_ok and self.sm['modelV2'].big,
+                                        self.enabled or self.mads.enabled)
+      if flags.no_entry:
+        self.events.add(EventName.bigModelLoading)
+      if flags.offer:
+        self.events_sp.add(custom.OnroadEventSP.EventName.jetlinkOffer)
+      if flags.link_lost:
+        self.events_sp.add(custom.OnroadEventSP.EventName.jetlinkLinkLost)
+      if flags.chime:
+        self.events_sp.add(custom.OnroadEventSP.EventName.jetlinkReady)
 
     # Block resume if cruise never previously enabled
     resume_pressed = any(be.type in (ButtonType.accelCruise, ButtonType.resumeCruise) for be in CS.buttonEvents)
@@ -435,7 +452,8 @@ class SelfdriveD(CruiseHelper):
     has_disable_events = self.events.contains(ET.NO_ENTRY) and (self.events.contains(ET.SOFT_DISABLE) or self.events.contains(ET.IMMEDIATE_DISABLE))
     no_system_errors = (not has_disable_events) or (len(self.events) == num_events)
     warmup_sec = 5.
-    big_model_settling = self.big_model_loading or time.monotonic() < self.big_model_ready_t + warmup_sec
+    jetlink_settling = self.jetlink_swaps is not None and self.jetlink_swaps.settling
+    big_model_settling = self.big_model_loading or time.monotonic() < self.big_model_ready_t + warmup_sec or jetlink_settling
     if not self.sm.all_checks() and no_system_errors and not big_model_settling:  # the load holds modelV2 and friends back on purpose
       if not self.sm.all_alive():
         self.events.add(EventName.commIssue)
